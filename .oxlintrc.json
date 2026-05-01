@@ -4,8 +4,7 @@
   "categories": {
     "correctness": "error",
     "suspicious": "warn",
-    "perf": "warn",
-    "style": "warn"
+    "perf": "warn"
   },
   "rules": {
     "no-debugger": "error",
