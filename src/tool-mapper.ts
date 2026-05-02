@@ -1,6 +1,3 @@
-/**
- * Tool-mapper.ts — Maps Pi AgentTool events to ACP ToolCall / ToolCallUpdate shapes.
- */
 import type * as acp from "@agentclientprotocol/sdk";
 import type { AgentEvent } from "@mariozechner/pi-agent-core";
 
@@ -14,15 +11,13 @@ export function mapToolCallStart(
   return {
     content: [
       {
-        text: argsStr,
-        type: "text",
+        content: { text: argsStr, type: "text" },
+        type: "content",
       },
     ],
-    kind: "tool",
     status: "pending",
     title: event.toolName,
     toolCallId: event.toolCallId,
-    type: "tool_call",
   };
 }
 
@@ -36,13 +31,12 @@ export function mapToolCallUpdate(
   return {
     content: [
       {
-        text: updateStr,
-        type: "text",
+        content: { text: updateStr, type: "text" },
+        type: "content",
       },
     ],
     status: "in_progress",
     toolCallId: event.toolCallId,
-    type: "tool_call_update",
   };
 }
 
@@ -56,19 +50,18 @@ export function mapToolCallEnd(
   return {
     content: [
       {
-        text: resultStr,
-        type: "text",
+        content: { text: resultStr, type: "text" },
+        type: "content",
       },
     ],
     status: event.isError ? "failed" : "completed",
     toolCallId: event.toolCallId,
-    type: "tool_call_update",
   };
 }
 
 function safeJsonStringify(value: unknown): string {
   try {
-    return JSON.stringify(value, null, 2);
+    return JSON.stringify(value, undefined, 2);
   } catch {
     return String(value);
   }

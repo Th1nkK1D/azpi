@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, mock } from "bun:test";
+import { describe, expect, it, mock } from "bun:test";
 import * as acp from "@agentclientprotocol/sdk";
 import { PiAcpAgent } from "./pi-acp-agent";
 import { mapSessionEvent, mapStopReason } from "./event-bridge";
@@ -27,7 +27,7 @@ describe("PiAcpAgent", () => {
       const conn = createMockConnection();
       const agent = new PiAcpAgent(conn);
       const result = await agent.initialize({
-        capabilities: {},
+        clientCapabilities: {},
         clientInfo: { name: "test-client", version: "1.0.0" },
         protocolVersion: acp.PROTOCOL_VERSION,
       });
@@ -40,13 +40,13 @@ describe("PiAcpAgent", () => {
       const conn = createMockConnection();
       const agent = new PiAcpAgent(conn);
       const result = await agent.initialize({
-        capabilities: {},
+        clientCapabilities: {},
         clientInfo: { name: "test-client", version: "1.0.0" },
         protocolVersion: acp.PROTOCOL_VERSION,
       });
-      expect(result.capabilities?.loadSession).toBe(false);
-      expect(result.capabilities?.promptCapabilities?.image).toBe(false);
-      expect(result.capabilities?.sessionCapabilities?.close).toBe(true);
+      expect(result.agentCapabilities?.loadSession).toBe(false);
+      expect(result.agentCapabilities?.promptCapabilities?.image).toBe(false);
+      expect(result.agentCapabilities?.sessionCapabilities?.close).toBeTruthy();
     });
   });
 
@@ -59,12 +59,16 @@ describe("PiAcpAgent", () => {
       ];
       // Verify the blocks are well-typed
       expect(blocks.length).toBe(2);
-      expect(blocks[0]!.text).toBe("Hello ");
-      expect(blocks[1]!.text).toBe("world");
+      const textBlocks = blocks.filter(
+        (b): b is acp.TextContent & { type: "text" } => b.type === "text",
+      );
+      expect(textBlocks[0]!.text).toBe("Hello ");
+      expect(textBlocks[1]!.text).toBe("world");
     });
 
     it("handles resource_link blocks", () => {
       const block: acp.ContentBlock = {
+        name: "test.txt",
         type: "resource_link",
         uri: "file:///test.txt",
       };
@@ -82,8 +86,8 @@ describe("mapStopReason", () => {
     expect(mapStopReason({ stopReason: "end_turn" })).toBe("end_turn");
   });
 
-  it("maps error to error", () => {
-    expect(mapStopReason({ stopReason: "error" })).toBe("error");
+  it("maps error to end_turn", () => {
+    expect(mapStopReason({ stopReason: "error" })).toBe("end_turn");
   });
 });
 
@@ -103,7 +107,8 @@ describe("mapSessionEvent", () => {
       },
       "sid",
     );
-    expect(result?.type).toBe("tool_call");
-    expect((result?.update as any).toolCallId).toBe("1");
+    expect(result).not.toBeNull();
+    expect(result!.update.sessionUpdate).toBe("tool_call");
+    expect((result!.update as any).toolCallId).toBe("1");
   });
 });

@@ -1,7 +1,3 @@
-/**
- * Pi-acp-agent.ts — Core class implementing acp.Agent, managing Pi session lifecycle
- * and bridging Pi events to ACP notifications.
- */
 import * as acp from "@agentclientprotocol/sdk";
 import { SessionManager, createAgentSession } from "@mariozechner/pi-coding-agent";
 import type {
@@ -9,7 +5,7 @@ import type {
   AgentSessionEvent,
   CreateAgentSessionOptions,
 } from "@mariozechner/pi-coding-agent";
-import { mapFinalContent, mapSessionEvent, mapStopReason } from "./event-bridge";
+import { mapSessionEvent, mapStopReason } from "./event-bridge";
 
 const AGENT_NAME = "pi";
 const AGENT_VERSION = "0.1.0";
@@ -19,6 +15,10 @@ export interface PiAcpAgentOptions {
   sessionOptions?: Omit<CreateAgentSessionOptions, "cwd" | "sessionManager">;
 }
 
+/**
+ * Core class implementing acp.Agent, managing Pi session lifecycle
+ * and bridging Pi events to ACP notifications.
+ */
 export class PiAcpAgent implements acp.Agent {
   private sessions = new Map<string, AgentSession>();
   private unsubscribers = new Map<string, () => void>();
@@ -33,15 +33,9 @@ export class PiAcpAgent implements acp.Agent {
     this.sessionOptions = options ?? {};
   }
 
-  // ─── initialize ────────────────────────────────────────────────
-
   async initialize(_params: acp.InitializeRequest): Promise<acp.InitializeResponse> {
     return {
-      agentInfo: {
-        name: AGENT_NAME,
-        version: AGENT_VERSION,
-      },
-      capabilities: {
+      agentCapabilities: {
         // MVP: no session load/resume, no auth
         loadSession: false,
         promptCapabilities: {
@@ -49,14 +43,16 @@ export class PiAcpAgent implements acp.Agent {
           image: false,
         },
         sessionCapabilities: {
-          close: true,
+          close: {},
         },
+      },
+      agentInfo: {
+        name: AGENT_NAME,
+        version: AGENT_VERSION,
       },
       protocolVersion: acp.PROTOCOL_VERSION,
     };
   }
-
-  // ─── newSession ────────────────────────────────────────────────
 
   async newSession(params: acp.NewSessionRequest): Promise<acp.NewSessionResponse> {
     const cwd = params.cwd ?? process.cwd();
@@ -79,8 +75,6 @@ export class PiAcpAgent implements acp.Agent {
     return { sessionId };
   }
 
-  // ─── prompt ────────────────────────────────────────────────────
-
   async prompt(params: acp.PromptRequest): Promise<acp.PromptResponse> {
     const session = this.sessions.get(params.sessionId);
     if (!session) {
@@ -88,7 +82,7 @@ export class PiAcpAgent implements acp.Agent {
     }
 
     // Build prompt text from ACP ContentBlocks
-    const text = extractPromptText(params.content);
+    const text = extractPromptText(params.prompt);
 
     // Create an abort controller for this prompt turn
     const controller = new AbortController();
@@ -100,11 +94,11 @@ export class PiAcpAgent implements acp.Agent {
     });
 
     // Start the Pi prompt (fire-and-forget; resolution comes via agent_end event)
-    session.prompt(text).catch((error: Error) => {
+    session.prompt(text).catch((_error: Error) => {
       // If prompt() itself throws (e.g. no model), resolve immediately
       const existing = this.pendingPrompts.get(params.sessionId);
       if (existing) {
-        existing.resolve({ stopReason: "error" });
+        existing.resolve({ stopReason: "end_turn" });
       }
     });
 
@@ -112,8 +106,6 @@ export class PiAcpAgent implements acp.Agent {
     this.abortControllers.delete(params.sessionId);
     return result;
   }
-
-  // ─── cancel ────────────────────────────────────────────────────
 
   async cancel(params: acp.CancelNotification): Promise<void> {
     const session = this.sessions.get(params.sessionId);
@@ -131,19 +123,13 @@ export class PiAcpAgent implements acp.Agent {
     }
   }
 
-  // ─── closeSession ──────────────────────────────────────────────
-
   async closeSession(params: acp.CloseSessionRequest): Promise<void> {
     await this.cleanupSession(params.sessionId);
   }
 
-  // ─── authenticate (stub) ───────────────────────────────────────
-
   async authenticate(_params: acp.AuthenticateRequest): Promise<void> {
     // No auth in MVP
   }
-
-  // ─── Internal event handler ────────────────────────────────────
 
   private onEvent(sessionId: string, event: AgentSessionEvent): void {
     // Forward to ACP client as session update
@@ -158,17 +144,14 @@ export class PiAcpAgent implements acp.Agent {
     if (event.type === "agent_end") {
       const lastMessage = event.messages[event.messages.length - 1];
       const stopReason = mapStopReason(lastMessage);
-      const content = mapFinalContent(lastMessage);
 
       const pending = this.pendingPrompts.get(sessionId);
       if (pending) {
         this.pendingPrompts.delete(sessionId);
-        pending.resolve({ content, stopReason });
+        pending.resolve({ stopReason });
       }
     }
   }
-
-  // ─── Cleanup ───────────────────────────────────────────────────
 
   private async cleanupSession(sessionId: string): Promise<void> {
     const unsubscribe = this.unsubscribers.get(sessionId);
@@ -198,12 +181,10 @@ export class PiAcpAgent implements acp.Agent {
     this.abortControllers.delete(sessionId);
   }
 
-  // ─── Public cleanup method ─────────────────────────────────────
-
   async close(): Promise<void> {
     const sessionIds = [...this.sessions.keys()];
     for (const id of sessionIds) {
-      await this.cleanupSession(id);
+      this.cleanupSession(id);
     }
   }
 }

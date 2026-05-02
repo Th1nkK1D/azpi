@@ -1,6 +1,3 @@
-/**
- * Event-bridge.ts — Maps Pi AgentSessionEvents to ACP SessionUpdate notifications.
- */
 import type * as acp from "@agentclientprotocol/sdk";
 import type { AgentSessionEvent } from "@mariozechner/pi-coding-agent";
 import { mapToolCallEnd, mapToolCallStart, mapToolCallUpdate } from "./tool-mapper";
@@ -21,9 +18,9 @@ export function mapSessionEvent(
       }
       return {
         sessionId,
-        type: "agent_message_chunk",
         update: {
           content: { text: content, type: "text" },
+          sessionUpdate: "agent_message_chunk",
         },
       };
     }
@@ -41,24 +38,30 @@ export function mapSessionEvent(
     case "tool_execution_start": {
       return {
         sessionId,
-        type: "tool_call",
-        update: mapToolCallStart(event),
+        update: {
+          sessionUpdate: "tool_call",
+          ...mapToolCallStart(event),
+        },
       };
     }
 
     case "tool_execution_update": {
       return {
         sessionId,
-        type: "tool_call_update",
-        update: mapToolCallUpdate(event),
+        update: {
+          sessionUpdate: "tool_call_update",
+          ...mapToolCallUpdate(event),
+        },
       };
     }
 
     case "tool_execution_end": {
       return {
         sessionId,
-        type: "tool_call_update",
-        update: mapToolCallEnd(event),
+        update: {
+          sessionUpdate: "tool_call_update",
+          ...mapToolCallEnd(event),
+        },
       };
     }
 
@@ -78,8 +81,6 @@ export function mapSessionEvent(
     }
 
     default: {
-      // Exhaustiveness guard
-      const _exhaustive: never = event;
       return null;
     }
   }
@@ -108,24 +109,15 @@ function extractTextContent(message: any): string | null {
 export function mapStopReason(message: any): acp.StopReason {
   const stopReason = message?.stopReason as string | undefined;
   switch (stopReason) {
-    case "aborted": {
-      return "cancelled";
-    }
-    case "error": {
-      return "error";
-    }
-    case "end_turn": {
-      return "end_turn";
-    }
-    case "max_tokens": {
+    case "max_tokens":
       return "max_tokens";
-    }
-    case "stop": {
+    case "aborted":
+      return "cancelled";
+    case "error":
+    case "end_turn":
+    case "stop":
+    default:
       return "end_turn";
-    }
-    default: {
-      return "end_turn";
-    }
   }
 }
 

@@ -1,4 +1,6 @@
 import { describe, expect, it } from "bun:test";
+import type { StopReason } from "@agentclientprotocol/sdk";
+import type { AgentSessionEvent } from "@mariozechner/pi-coding-agent";
 import { mapFinalContent, mapSessionEvent, mapStopReason } from "./event-bridge";
 
 const SID = "test-session";
@@ -10,10 +12,10 @@ describe("event-bridge", () => {
         assistantMessageEvent: { text: "Hello world", type: "text_delta" },
         message: { content: "Hello world", role: "assistant" },
         type: "message_update" as const,
-      };
+      } as unknown as AgentSessionEvent;
       const result = mapSessionEvent(event, SID);
       expect(result).not.toBeNull();
-      expect(result!.type).toBe("agent_message_chunk");
+      expect(result!.update.sessionUpdate).toBe("agent_message_chunk");
       expect(result!.sessionId).toBe(SID);
       expect((result!.update as any).content.text).toBe("Hello world");
     });
@@ -23,7 +25,7 @@ describe("event-bridge", () => {
         assistantMessageEvent: { text: "", type: "text_delta" },
         message: { content: [], role: "assistant" },
         type: "message_update" as const,
-      };
+      } as unknown as AgentSessionEvent;
       const result = mapSessionEvent(event, SID);
       expect(result).toBeNull();
     });
@@ -34,10 +36,10 @@ describe("event-bridge", () => {
         toolCallId: "tc-1",
         toolName: "bash",
         type: "tool_execution_start" as const,
-      };
+      } as unknown as AgentSessionEvent;
       const result = mapSessionEvent(event, SID);
       expect(result).not.toBeNull();
-      expect(result!.type).toBe("tool_call");
+      expect(result!.update.sessionUpdate).toBe("tool_call");
       expect(result!.sessionId).toBe(SID);
       expect((result!.update as any).toolCallId).toBe("tc-1");
       expect((result!.update as any).status).toBe("pending");
@@ -50,10 +52,10 @@ describe("event-bridge", () => {
         toolCallId: "tc-1",
         toolName: "bash",
         type: "tool_execution_update" as const,
-      };
+      } as unknown as AgentSessionEvent;
       const result = mapSessionEvent(event, SID);
       expect(result).not.toBeNull();
-      expect(result!.type).toBe("tool_call_update");
+      expect(result!.update.sessionUpdate).toBe("tool_call_update");
       expect((result!.update as any).status).toBe("in_progress");
     });
 
@@ -64,10 +66,10 @@ describe("event-bridge", () => {
         toolCallId: "tc-1",
         toolName: "bash",
         type: "tool_execution_end" as const,
-      };
+      } as unknown as AgentSessionEvent;
       const result = mapSessionEvent(event, SID);
       expect(result).not.toBeNull();
-      expect(result!.type).toBe("tool_call_update");
+      expect(result!.update.sessionUpdate).toBe("tool_call_update");
       expect((result!.update as any).status).toBe("completed");
     });
 
@@ -78,19 +80,23 @@ describe("event-bridge", () => {
         toolCallId: "tc-1",
         toolName: "bash",
         type: "tool_execution_end" as const,
-      };
+      } as unknown as AgentSessionEvent;
       const result = mapSessionEvent(event, SID);
       expect(result).not.toBeNull();
+      expect(result!.update.sessionUpdate).toBe("tool_call_update");
       expect((result!.update as any).status).toBe("failed");
     });
 
     it("returns null for agent_start", () => {
-      const event = { type: "agent_start" as const };
+      const event = { type: "agent_start" as const } as unknown as AgentSessionEvent;
       expect(mapSessionEvent(event, SID)).toBeNull();
     });
 
     it("returns null for agent_end", () => {
-      const event = { messages: [], type: "agent_end" as const };
+      const event = {
+        messages: [],
+        type: "agent_end" as const,
+      } as unknown as AgentSessionEvent;
       expect(mapSessionEvent(event, SID)).toBeNull();
     });
   });
@@ -98,7 +104,7 @@ describe("event-bridge", () => {
   describe("mapStopReason", () => {
     it.each([
       ["aborted", "cancelled"],
-      ["error", "error"],
+      ["error", "end_turn"],
       ["end_turn", "end_turn"],
       ["max_tokens", "max_tokens"],
       ["stop", "end_turn"],
@@ -106,7 +112,7 @@ describe("event-bridge", () => {
       ["unknown", "end_turn"],
     ])("maps %s → %s", (input, expected) => {
       const msg = { stopReason: input };
-      expect(mapStopReason(msg)).toBe(expected);
+      expect(mapStopReason(msg)).toBe(expected as StopReason);
     });
   });
 
@@ -129,7 +135,7 @@ describe("event-bridge", () => {
     });
 
     it("returns empty array for null message", () => {
-      expect(mapFinalContent(null)).toEqual([]);
+      expect(mapFinalContent(undefined)).toEqual([]);
     });
   });
 });

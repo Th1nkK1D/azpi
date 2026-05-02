@@ -1,13 +1,11 @@
-#!/usr/bin/env bun
-/**
- * Main.ts — Entry point for the Pi ACP adapter.
- *
- * Wires stdio to ndJsonStream and instantiates PiAcpAgent via AgentSideConnection.
- */
 import * as acp from "@agentclientprotocol/sdk";
 import { Readable, Writable } from "node:stream";
 import { PiAcpAgent } from "./pi-acp-agent";
 
+/**
+ * Entry point for the Pi ACP adapter.
+ * Wires stdio to ndJsonStream and instantiates PiAcpAgent via AgentSideConnection.
+ */
 async function main() {
   // Create the NDJSON stream over stdin/stdout using Node's toWeb() helpers
   const stream = acp.ndJsonStream(Writable.toWeb(process.stdout), Readable.toWeb(process.stdin));
