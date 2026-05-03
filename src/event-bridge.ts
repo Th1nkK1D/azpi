@@ -12,17 +12,21 @@ export function mapSessionEvent(
 ): acp.SessionNotification | null {
   switch (event.type) {
     case "message_update": {
-      const content = extractTextContent(event.message);
-      if (!content) {
-        return null;
+      const assistantEvent = event.assistantMessageEvent;
+      if (assistantEvent?.type === "text_delta") {
+        const delta = assistantEvent.delta;
+        if (typeof delta !== "string" || delta.length === 0) {
+          return null;
+        }
+        return {
+          sessionId,
+          update: {
+            content: { text: delta, type: "text" },
+            sessionUpdate: "agent_message_chunk",
+          },
+        };
       }
-      return {
-        sessionId,
-        update: {
-          content: { text: content, type: "text" },
-          sessionUpdate: "agent_message_chunk",
-        },
-      };
+      return null;
     }
 
     case "message_start": {

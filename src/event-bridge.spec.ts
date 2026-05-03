@@ -7,9 +7,9 @@ const SID = "test-session";
 
 describe("event-bridge", () => {
   describe("mapSessionEvent", () => {
-    it("maps message_update to agent_message_chunk", () => {
+    it("maps message_update text_delta to agent_message_chunk", () => {
       const event = {
-        assistantMessageEvent: { text: "Hello world", type: "text_delta" },
+        assistantMessageEvent: { delta: "Hello world", type: "text_delta" },
         message: { content: "Hello world", role: "assistant" },
         type: "message_update" as const,
       } as unknown as AgentSessionEvent;
@@ -20,10 +20,20 @@ describe("event-bridge", () => {
       expect((result!.update as any).content.text).toBe("Hello world");
     });
 
-    it("returns null for message_update with no text content", () => {
+    it("returns null for message_update with empty delta", () => {
       const event = {
-        assistantMessageEvent: { text: "", type: "text_delta" },
+        assistantMessageEvent: { delta: "", type: "text_delta" },
         message: { content: [], role: "assistant" },
+        type: "message_update" as const,
+      } as unknown as AgentSessionEvent;
+      const result = mapSessionEvent(event, SID);
+      expect(result).toBeNull();
+    });
+
+    it("returns null for message_update non-text_delta assistantMessageEvent", () => {
+      const event = {
+        assistantMessageEvent: { type: "text_start" },
+        message: { content: "Hello world", role: "assistant" },
         type: "message_update" as const,
       } as unknown as AgentSessionEvent;
       const result = mapSessionEvent(event, SID);
