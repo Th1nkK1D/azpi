@@ -16,8 +16,8 @@
   },
   "dependencies": {
     "@agentclientprotocol/sdk": "^0.21.0",
-    "@mariozechner/pi-ai": "^0.71.1",
-    "@mariozechner/pi-coding-agent": "^0.71.1"
+    "@mariozechner/pi-ai": "^0.72.1",
+    "@mariozechner/pi-coding-agent": "^0.72.1"
   },
   "devDependencies": {
     "@types/bun": "latest",

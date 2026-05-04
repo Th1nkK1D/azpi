@@ -1,11 +1,18 @@
 import * as acp from "@agentclientprotocol/sdk";
-import { SessionManager, createAgentSession } from "@mariozechner/pi-coding-agent";
+import {
+  AuthStorage,
+  ModelRegistry,
+  SessionManager,
+  createAgentSession,
+} from "@mariozechner/pi-coding-agent";
 import type {
   AgentSession,
   AgentSessionEvent,
   CreateAgentSessionOptions,
 } from "@mariozechner/pi-coding-agent";
+import type { Model } from "@mariozechner/pi-ai";
 import { mapSessionEvent, mapStopReason } from "./event-bridge";
+import { buildModelConfigOption, buildModelState, buildThinkingLevelConfigOption } from "./config";
 
 const AGENT_NAME = "pi";
 const AGENT_VERSION = "0.1.0";
@@ -13,6 +20,12 @@ const AGENT_VERSION = "0.1.0";
 export interface PiAcpAgentOptions {
   /** Optional createAgentSession overrides (model, tools, etc.) */
   sessionOptions?: Omit<CreateAgentSessionOptions, "cwd" | "sessionManager">;
+  /** Optional auth storage (defaults to Pi's default path) */
+  authStorage?: AuthStorage;
+  /** Optional model registry (defaults to Pi's default path) */
+  modelRegistry?: ModelRegistry;
+  /** Optional session factory for testing */
+  sessionFactory?: (cwd: string) => Promise<{ session: AgentSession }>;
 }
 
 /**
@@ -25,16 +38,22 @@ export class PiAcpAgent implements acp.Agent {
   private pendingPrompts = new Map<string, { resolve: (r: acp.PromptResponse) => void }>();
   private abortControllers = new Map<string, AbortController>();
 
-  readonly sessionOptions: PiAcpAgentOptions;
+  readonly options: PiAcpAgentOptions;
   readonly connection: acp.AgentSideConnection;
+  readonly authStorage: AuthStorage;
+  readonly modelRegistry: ModelRegistry;
+  readonly availableModels: Model<any>[];
 
   constructor(connection: acp.AgentSideConnection, options?: PiAcpAgentOptions) {
     this.connection = connection;
-    this.sessionOptions = options ?? {};
+    this.options = options ?? {};
+    this.authStorage = options?.authStorage ?? AuthStorage.create();
+    this.modelRegistry = options?.modelRegistry ?? ModelRegistry.create(this.authStorage);
+    this.availableModels = this.modelRegistry.getAvailable();
   }
 
   async initialize(_params: acp.InitializeRequest): Promise<acp.InitializeResponse> {
-    return {
+    const response: acp.InitializeResponse = {
       agentCapabilities: {
         // MVP: no session load/resume, no auth
         loadSession: false,
@@ -52,17 +71,50 @@ export class PiAcpAgent implements acp.Agent {
       },
       protocolVersion: acp.PROTOCOL_VERSION,
     };
+
+    return response;
+  }
+
+  private buildConfigOptions(session: AgentSession): acp.SessionConfigOption[] {
+    return [
+      buildModelConfigOption(session, this.availableModels),
+      buildThinkingLevelConfigOption(session),
+    ];
+  }
+
+  private async sendConfigOptionsUpdate(sessionId: string): Promise<void> {
+    const session = this.sessions.get(sessionId);
+    if (!session) return;
+
+    const notification: acp.SessionNotification = {
+      sessionId,
+      update: {
+        sessionUpdate: "config_option_update",
+        configOptions: this.buildConfigOptions(session),
+      },
+    };
+
+    await this.connection.sessionUpdate(notification);
   }
 
   async newSession(params: acp.NewSessionRequest): Promise<acp.NewSessionResponse> {
     const cwd = params.cwd ?? process.cwd();
     const sessionId = crypto.randomUUID();
 
-    const { session } = await createAgentSession({
-      cwd,
-      sessionManager: SessionManager.inMemory(),
-      ...this.sessionOptions,
-    });
+    const { session } = this.options.sessionFactory
+      ? await this.options.sessionFactory(cwd)
+      : await createAgentSession({
+          cwd,
+          sessionManager: SessionManager.inMemory(),
+          authStorage: this.authStorage,
+          modelRegistry: this.modelRegistry,
+          ...this.options.sessionOptions,
+        });
+
+    // Ensure a model is selected for ACP UI
+    if (!session.model && this.availableModels.length > 0) {
+      await session.setModel(this.availableModels[0]!);
+    }
 
     this.sessions.set(sessionId, session);
 
@@ -72,7 +124,15 @@ export class PiAcpAgent implements acp.Agent {
     });
     this.unsubscribers.set(sessionId, unsubscribe);
 
-    return { sessionId };
+    const response: acp.NewSessionResponse = { sessionId };
+
+    if (session.model) {
+      response.models = buildModelState(this.availableModels, session.model);
+    }
+
+    response.configOptions = this.buildConfigOptions(session);
+
+    return response;
   }
 
   async prompt(params: acp.PromptRequest): Promise<acp.PromptResponse> {
@@ -131,7 +191,72 @@ export class PiAcpAgent implements acp.Agent {
     // No auth in MVP
   }
 
+  async unstable_setSessionModel(
+    params: acp.SetSessionModelRequest,
+  ): Promise<acp.SetSessionModelResponse> {
+    const session = this.sessions.get(params.sessionId);
+    if (!session) {
+      throw acp.RequestError.invalidParams(`Unknown session: ${params.sessionId}`);
+    }
+
+    const parts = params.modelId.split("/", 2);
+    if (parts.length !== 2) {
+      throw acp.RequestError.invalidParams(`Invalid modelId: ${params.modelId}`);
+    }
+
+    const provider = parts[0]!;
+    const modelId = parts[1]!;
+    const model = this.modelRegistry.find(provider, modelId);
+    if (!model) {
+      throw acp.RequestError.invalidParams(`Unknown model: ${params.modelId}`);
+    }
+
+    await session.setModel(model);
+    await this.sendConfigOptionsUpdate(params.sessionId);
+
+    return {};
+  }
+
+  async setSessionConfigOption(
+    params: acp.SetSessionConfigOptionRequest,
+  ): Promise<acp.SetSessionConfigOptionResponse> {
+    const session = this.sessions.get(params.sessionId);
+    if (!session) {
+      throw acp.RequestError.invalidParams(`Unknown session: ${params.sessionId}`);
+    }
+
+    if (params.configId === "model") {
+      const modelId = params.value as string;
+      const parts = modelId.split("/", 2);
+      if (parts.length !== 2) {
+        throw acp.RequestError.invalidParams(`Invalid modelId: ${modelId}`);
+      }
+      const provider = parts[0]!;
+      const id = parts[1]!;
+      const model = this.modelRegistry.find(provider, id);
+      if (!model) {
+        throw acp.RequestError.invalidParams(`Unknown model: ${modelId}`);
+      }
+      await session.setModel(model);
+    } else if (params.configId === "thinking-level") {
+      session.setThinkingLevel(params.value as AgentSession["thinkingLevel"]);
+    } else {
+      throw acp.RequestError.invalidParams(`Unknown config option: ${params.configId}`);
+    }
+
+    return {
+      configOptions: this.buildConfigOptions(session),
+    };
+  }
+
   private onEvent(sessionId: string, event: AgentSessionEvent): void {
+    if (event.type === "thinking_level_changed") {
+      this.sendConfigOptionsUpdate(sessionId).catch(() => {
+        // Connection may be closing; ignore
+      });
+      return;
+    }
+
     // Forward to ACP client as session update
     const notification = mapSessionEvent(event, sessionId);
     if (notification) {
