@@ -13,6 +13,7 @@ import type {
 import type { Model } from "@mariozechner/pi-ai";
 import { mapSessionEvent, mapStopReason } from "./event-bridge";
 import { buildModelConfigOption, buildModelState, buildThinkingLevelConfigOption } from "./config";
+import { buildStartupMessage } from "./startup";
 import { name as AGENT_NAME, version as AGENT_VERSION } from "../package.json";
 
 export interface PiAcpAgentOptions {
@@ -129,6 +130,20 @@ export class PiAcpAgent implements acp.Agent {
     }
 
     response.configOptions = this.buildConfigOptions(session);
+
+    // Send startup message (fire-and-forget; not awaited)
+    const message = buildStartupMessage(session);
+    this.connection
+      .sessionUpdate({
+        sessionId,
+        update: {
+          content: { text: message, type: "text" },
+          sessionUpdate: "agent_message_chunk",
+        },
+      })
+      .catch(() => {
+        // Connection may be closing; ignore
+      });
 
     return response;
   }

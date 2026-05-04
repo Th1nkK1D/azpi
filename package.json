@@ -10,7 +10,7 @@
   "scripts": {
     "prepare": "husky",
     "test": "bun test",
-    "build": "bun build src/main.ts --outdir dist --target bun",
+    "build": "bun build src/main.ts --outdir dist --target bun --minify",
     "format": "oxfmt --write",
     "lint": "oxlint --fix",
     "check": "tsc --noEmit"

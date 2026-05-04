@@ -40,6 +40,12 @@ function createMockModel(overrides?: Partial<Model<any>>): Model<any> {
 function createMockSession(overrides?: Partial<AgentSession>): AgentSession {
   const subscribers: Array<(event: any) => void> = [];
 
+  const mockResourceLoader = {
+    getAgentsFiles: () => ({ agentsFiles: [] }),
+    getSkills: () => ({ skills: [], diagnostics: [] }),
+    getExtensions: () => ({ extensions: [], errors: [] }),
+  };
+
   return {
     model: createMockModel(),
     thinkingLevel: "medium",
@@ -56,6 +62,7 @@ function createMockSession(overrides?: Partial<AgentSession>): AgentSession {
     prompt: mock(async () => {}),
     abort: mock(async () => {}),
     dispose: mock(() => {}),
+    resourceLoader: mockResourceLoader,
     _subscribers: subscribers,
     ...overrides,
   } as unknown as AgentSession;
