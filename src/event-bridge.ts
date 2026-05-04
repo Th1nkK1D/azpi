@@ -9,6 +9,7 @@ import { mapToolCallEnd, mapToolCallStart, mapToolCallUpdate } from "./tool-call
 export function mapSessionEvent(
   event: AgentSessionEvent,
   sessionId: string,
+  configOptions?: acp.SessionConfigOption[],
 ): acp.SessionNotification | null {
   switch (event.type) {
     case "message_update": {
@@ -23,6 +24,18 @@ export function mapSessionEvent(
           update: {
             content: { text: delta, type: "text" },
             sessionUpdate: "agent_message_chunk",
+          },
+        };
+      } else if (assistantEvent?.type === "thinking_delta") {
+        const delta = assistantEvent.delta;
+        if (typeof delta !== "string" || delta.length === 0) {
+          return null;
+        }
+        return {
+          sessionId,
+          update: {
+            content: { text: delta, type: "text" },
+            sessionUpdate: "agent_thought_chunk",
           },
         };
       }
@@ -69,6 +82,27 @@ export function mapSessionEvent(
       };
     }
 
+    case "session_info_changed": {
+      return {
+        sessionId,
+        update: {
+          sessionUpdate: "session_info_update",
+          title: event.name ?? null,
+        },
+      };
+    }
+
+    case "thinking_level_changed": {
+      if (!configOptions) return null;
+      return {
+        sessionId,
+        update: {
+          sessionUpdate: "config_option_update",
+          configOptions,
+        },
+      };
+    }
+
     case "agent_start":
     case "agent_end":
     case "turn_start":
@@ -76,8 +110,6 @@ export function mapSessionEvent(
     case "queue_update":
     case "compaction_start":
     case "compaction_end":
-    case "session_info_changed":
-    case "thinking_level_changed":
     case "auto_retry_start":
     case "auto_retry_end": {
       // These events don't map to ACP notifications in the MVP

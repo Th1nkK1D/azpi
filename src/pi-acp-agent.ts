@@ -127,14 +127,12 @@ export class PiAcpAgent implements acp.Agent {
           ...this.options.sessionOptions,
         });
 
-    // Ensure a model is selected for ACP UI
     if (!session.model && this.availableModels.length > 0) {
       await session.setModel(this.availableModels[0]!);
     }
 
     this.sessions.set(sessionId, session);
 
-    // Subscribe to Pi events and forward them as ACP notifications
     const unsubscribe = session.subscribe((event: AgentSessionEvent) => {
       this.onEvent(sessionId, event);
     });
@@ -171,21 +169,17 @@ export class PiAcpAgent implements acp.Agent {
       throw acp.RequestError.invalidParams(`Unknown session: ${params.sessionId}`);
     }
 
-    // Build prompt text from ACP ContentBlocks
     const text = extractPromptText(params.prompt);
 
-    // Create an abort controller for this prompt turn
     const controller = new AbortController();
     this.abortControllers.set(params.sessionId, controller);
 
-    // Create a promise that will be resolved when agent_end fires or abort is called
     const promptPromise = new Promise<acp.PromptResponse>((resolve) => {
       this.pendingPrompts.set(params.sessionId, { resolve });
     });
 
     // Start the Pi prompt (fire-and-forget; resolution comes via agent_end event)
     session.prompt(text).catch((_error: Error) => {
-      // If prompt() itself throws (e.g. no model), resolve immediately
       const existing = this.pendingPrompts.get(params.sessionId);
       if (existing) {
         existing.resolve({ stopReason: "end_turn" });
@@ -205,9 +199,7 @@ export class PiAcpAgent implements acp.Agent {
 
     const pending = this.pendingPrompts.get(params.sessionId);
     if (pending) {
-      // Abort the session — this will trigger agent_end with stopReason: "aborted"
       await session.abort();
-      // The event handler should have already resolved the promise, but just in case:
       this.pendingPrompts.delete(params.sessionId);
       pending.resolve({ stopReason: "cancelled" });
     }
@@ -280,22 +272,15 @@ export class PiAcpAgent implements acp.Agent {
   }
 
   private onEvent(sessionId: string, event: AgentSessionEvent): void {
-    if (event.type === "thinking_level_changed") {
-      this.sendConfigOptionsUpdate(sessionId).catch(() => {
-        // Connection may be closing; ignore
-      });
-      return;
-    }
-
-    // Forward to ACP client as session update
-    const notification = mapSessionEvent(event, sessionId);
+    const session = this.sessions.get(sessionId);
+    const configOptions = session ? this.buildConfigOptions(session) : undefined;
+    const notification = mapSessionEvent(event, sessionId, configOptions);
     if (notification) {
       this.connection.sessionUpdate(notification).catch(() => {
         // Connection may be closing; ignore
       });
     }
 
-    // Handle agent_end: resolve the pending prompt promise
     if (event.type === "agent_end") {
       const lastMessage = event.messages[event.messages.length - 1];
       const stopReason = mapStopReason(lastMessage);
@@ -326,7 +311,6 @@ export class PiAcpAgent implements acp.Agent {
       this.sessions.delete(sessionId);
     }
 
-    // Resolve any pending prompt as cancelled
     const pending = this.pendingPrompts.get(sessionId);
     if (pending) {
       this.pendingPrompts.delete(sessionId);

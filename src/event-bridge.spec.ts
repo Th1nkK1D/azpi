@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import type { SessionConfigOption } from "@agentclientprotocol/sdk";
 import type { StopReason } from "@agentclientprotocol/sdk";
 import type { AgentSessionEvent } from "@mariozechner/pi-coding-agent";
 import { mapFinalContent, mapSessionEvent, mapStopReason } from "./event-bridge";
@@ -108,6 +109,83 @@ describe("event-bridge", () => {
         type: "agent_end" as const,
       } as unknown as AgentSessionEvent;
       expect(mapSessionEvent(event, SID)).toBeNull();
+    });
+
+    it("maps message_update thinking_delta to agent_thought_chunk", () => {
+      const event = {
+        assistantMessageEvent: { delta: "Let me think...", type: "thinking_delta" },
+        message: { content: "Let me think...", role: "assistant" },
+        type: "message_update" as const,
+      } as unknown as AgentSessionEvent;
+      const result = mapSessionEvent(event, SID);
+      expect(result).not.toBeNull();
+      expect(result!.update.sessionUpdate).toBe("agent_thought_chunk");
+      expect(result!.sessionId).toBe(SID);
+      expect((result!.update as any).content.text).toBe("Let me think...");
+    });
+
+    it("returns null for message_update thinking_delta with empty delta", () => {
+      const event = {
+        assistantMessageEvent: { delta: "", type: "thinking_delta" },
+        message: { content: [], role: "assistant" },
+        type: "message_update" as const,
+      } as unknown as AgentSessionEvent;
+      const result = mapSessionEvent(event, SID);
+      expect(result).toBeNull();
+    });
+
+    it("maps session_info_changed to session_info_update", () => {
+      const event = {
+        name: "My Session",
+        type: "session_info_changed" as const,
+      } as unknown as AgentSessionEvent;
+      const result = mapSessionEvent(event, SID);
+      expect(result).not.toBeNull();
+      expect(result!.update.sessionUpdate).toBe("session_info_update");
+      expect(result!.sessionId).toBe(SID);
+      expect((result!.update as any).title).toBe("My Session");
+    });
+
+    it("maps session_info_changed with undefined name to null title", () => {
+      const event = {
+        name: undefined,
+        type: "session_info_changed" as const,
+      } as unknown as AgentSessionEvent;
+      const result = mapSessionEvent(event, SID);
+      expect(result).not.toBeNull();
+      expect(result!.update.sessionUpdate).toBe("session_info_update");
+      expect((result!.update as any).title).toBeNull();
+    });
+
+    it("maps thinking_level_changed to config_option_update when configOptions provided", () => {
+      const event = {
+        level: "high",
+        type: "thinking_level_changed" as const,
+      } as unknown as AgentSessionEvent;
+      const configOptions: SessionConfigOption[] = [
+        {
+          id: "thinking-level",
+          category: "thought_level",
+          name: "Thinking",
+          options: [],
+          currentValue: "high",
+          type: "select",
+        },
+      ];
+      const result = mapSessionEvent(event, SID, configOptions);
+      expect(result).not.toBeNull();
+      expect(result!.update.sessionUpdate).toBe("config_option_update");
+      expect(result!.sessionId).toBe(SID);
+      expect((result!.update as any).configOptions).toBe(configOptions);
+    });
+
+    it("returns null for thinking_level_changed when configOptions not provided", () => {
+      const event = {
+        level: "high",
+        type: "thinking_level_changed" as const,
+      } as unknown as AgentSessionEvent;
+      const result = mapSessionEvent(event, SID);
+      expect(result).toBeNull();
     });
   });
 
