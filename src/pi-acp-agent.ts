@@ -13,8 +13,9 @@ import type {
 import type { Model } from "@mariozechner/pi-ai";
 import { createAcpProxyTools } from "./client-tool-proxy";
 import { mapSessionEvent, mapStopReason } from "./event-bridge";
+import { convertPromptContent } from "./prompt-content";
 import { buildModelConfigOption, buildModelState, buildThinkingLevelConfigOption } from "./config";
-import { buildStartupMessage } from "./startup";
+import { buildStartupMessage } from "./startup-message";
 import { name as AGENT_NAME, version as AGENT_VERSION } from "../package.json";
 
 export interface PiAcpAgentOptions {
@@ -57,13 +58,16 @@ export class PiAcpAgent implements acp.Agent {
   async initialize(params: acp.InitializeRequest): Promise<acp.InitializeResponse> {
     this.clientCapabilities = params.clientCapabilities;
 
+    const anyModelSupportsImage = this.availableModels.some((m) => m.input.includes("image"));
+
     const response: acp.InitializeResponse = {
       agentCapabilities: {
         // MVP: no session load/resume, no auth
         loadSession: false,
         promptCapabilities: {
           audio: false,
-          image: false,
+          image: anyModelSupportsImage,
+          embeddedContext: true,
         },
         sessionCapabilities: {
           close: {},
@@ -169,7 +173,7 @@ export class PiAcpAgent implements acp.Agent {
       throw acp.RequestError.invalidParams(`Unknown session: ${params.sessionId}`);
     }
 
-    const text = extractPromptText(params.prompt);
+    const { text, images } = convertPromptContent(params.prompt, session.model);
 
     const controller = new AbortController();
     this.abortControllers.set(params.sessionId, controller);
@@ -179,7 +183,7 @@ export class PiAcpAgent implements acp.Agent {
     });
 
     // Start the Pi prompt (fire-and-forget; resolution comes via agent_end event)
-    session.prompt(text).catch((_error: Error) => {
+    session.prompt(text, images.length > 0 ? { images } : undefined).catch((_error: Error) => {
       const existing = this.pendingPrompts.get(params.sessionId);
       if (existing) {
         existing.resolve({ stopReason: "end_turn" });
@@ -326,42 +330,4 @@ export class PiAcpAgent implements acp.Agent {
       this.cleanupSession(id);
     }
   }
-}
-
-/**
- * Extracts a plain text prompt from ACP ContentBlock[].
- * Text blocks are concatenated. Other block types are included as markdown.
- */
-function extractPromptText(content: acp.ContentBlock[]): string {
-  const parts: string[] = [];
-  for (const block of content) {
-    switch (block.type) {
-      case "text": {
-        parts.push(block.text);
-        break;
-      }
-      case "image": {
-        parts.push(`[Image: ${block.mimeType}]`);
-        break;
-      }
-      case "audio": {
-        parts.push(`[Audio: ${block.mimeType}]`);
-        break;
-      }
-      case "resource_link": {
-        parts.push(`[Resource: ${block.uri}]`);
-        break;
-      }
-      case "resource": {
-        const res = block.resource;
-        if ("text" in res && typeof res.text === "string") {
-          parts.push(`\`\`\`\n${res.text}\n\`\`\``);
-        } else {
-          parts.push(`[Binary resource: ${res.uri}]`);
-        }
-        break;
-      }
-    }
-  }
-  return parts.join("\n");
 }

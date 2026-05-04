@@ -100,8 +100,12 @@ describe("PiAcpAgent", () => {
     });
 
     it("advertises correct capabilities", async () => {
+      const models = [createMockModel({ id: "text-only", input: ["text"] })];
       const conn = createMockConnection();
-      const agent = new PiAcpAgent(conn);
+      const agent = new PiAcpAgent(conn, {
+        authStorage: createMockAuthStorage(),
+        modelRegistry: createMockRegistry(models) as any,
+      });
       const result = await agent.initialize({
         clientCapabilities: {},
         clientInfo: { name: "test-client", version: "1.0.0" },
@@ -109,6 +113,7 @@ describe("PiAcpAgent", () => {
       });
       expect(result.agentCapabilities?.loadSession).toBe(false);
       expect(result.agentCapabilities?.promptCapabilities?.image).toBe(false);
+      expect(result.agentCapabilities?.promptCapabilities?.embeddedContext).toBe(true);
       expect(result.agentCapabilities?.sessionCapabilities?.close).toBeTruthy();
     });
   });
@@ -397,27 +402,43 @@ describe("PiAcpAgent", () => {
     });
   });
 
-  describe("prompt text extraction", () => {
-    it("extracts text from simple content blocks", () => {
-      const blocks: acp.ContentBlock[] = [
-        { text: "Hello ", type: "text" },
-        { text: "world", type: "text" },
+  describe("initialize capabilities", () => {
+    it("advertises image: true when at least one model supports images", async () => {
+      const models = [
+        createMockModel({ id: "text-only", input: ["text"] }),
+        createMockModel({ id: "vision", input: ["text", "image"] }),
       ];
-      expect(blocks.length).toBe(2);
-      const textBlocks = blocks.filter(
-        (b): b is acp.TextContent & { type: "text" } => b.type === "text",
-      );
-      expect(textBlocks[0]!.text).toBe("Hello ");
-      expect(textBlocks[1]!.text).toBe("world");
+      const conn = createMockConnection();
+      const agent = new PiAcpAgent(conn, {
+        authStorage: createMockAuthStorage(),
+        modelRegistry: createMockRegistry(models) as any,
+      });
+      const result = await agent.initialize({
+        clientCapabilities: {},
+        clientInfo: { name: "test", version: "1.0" },
+        protocolVersion: acp.PROTOCOL_VERSION,
+      });
+      expect(result.agentCapabilities?.promptCapabilities?.image).toBe(true);
+      expect(result.agentCapabilities?.promptCapabilities?.embeddedContext).toBe(true);
     });
 
-    it("handles resource_link blocks", () => {
-      const block: acp.ContentBlock = {
-        name: "test.txt",
-        type: "resource_link",
-        uri: "file:///test.txt",
-      };
-      expect(block.type).toBe("resource_link");
+    it("advertises image: false when no models support images", async () => {
+      const models = [
+        createMockModel({ id: "text-only-1", input: ["text"] }),
+        createMockModel({ id: "text-only-2", input: ["text"] }),
+      ];
+      const conn = createMockConnection();
+      const agent = new PiAcpAgent(conn, {
+        authStorage: createMockAuthStorage(),
+        modelRegistry: createMockRegistry(models) as any,
+      });
+      const result = await agent.initialize({
+        clientCapabilities: {},
+        clientInfo: { name: "test", version: "1.0" },
+        protocolVersion: acp.PROTOCOL_VERSION,
+      });
+      expect(result.agentCapabilities?.promptCapabilities?.image).toBe(false);
+      expect(result.agentCapabilities?.promptCapabilities?.embeddedContext).toBe(true);
     });
   });
 });
