@@ -11,6 +11,7 @@ import type {
   CreateAgentSessionOptions,
 } from "@mariozechner/pi-coding-agent";
 import type { Model } from "@mariozechner/pi-ai";
+import { createAcpProxyTools } from "./client-tool-proxy";
 import { mapSessionEvent, mapStopReason } from "./event-bridge";
 import { buildModelConfigOption, buildModelState, buildThinkingLevelConfigOption } from "./config";
 import { buildStartupMessage } from "./startup";
@@ -41,6 +42,8 @@ export class PiAcpAgent implements acp.Agent {
   readonly connection: acp.AgentSideConnection;
   readonly authStorage: AuthStorage;
   readonly modelRegistry: ModelRegistry;
+  private clientCapabilities?: acp.ClientCapabilities;
+
   readonly availableModels: Model<any>[];
 
   constructor(connection: acp.AgentSideConnection, options?: PiAcpAgentOptions) {
@@ -51,7 +54,9 @@ export class PiAcpAgent implements acp.Agent {
     this.availableModels = this.modelRegistry.getAvailable();
   }
 
-  async initialize(_params: acp.InitializeRequest): Promise<acp.InitializeResponse> {
+  async initialize(params: acp.InitializeRequest): Promise<acp.InitializeResponse> {
+    this.clientCapabilities = params.clientCapabilities;
+
     const response: acp.InitializeResponse = {
       agentCapabilities: {
         // MVP: no session load/resume, no auth
@@ -100,11 +105,23 @@ export class PiAcpAgent implements acp.Agent {
     const cwd = params.cwd ?? process.cwd();
     const sessionId = crypto.randomUUID();
 
+    // Build proxy tools for ACP client capabilities the client advertised
+    const proxyTools = createAcpProxyTools({
+      connection: this.connection,
+      sessionId,
+      capabilities: this.clientCapabilities,
+      cwd,
+    });
+
     const { session } = this.options.sessionFactory
       ? await this.options.sessionFactory(cwd)
       : await createAgentSession({
           cwd,
           sessionManager: SessionManager.inMemory(),
+          // Custom tools with the same name override built-ins;
+          // the allowlist keeps all 4 tool slots regardless of which we override.
+          tools: ["read", "bash", "edit", "write"],
+          customTools: proxyTools,
           authStorage: this.authStorage,
           modelRegistry: this.modelRegistry,
           ...this.options.sessionOptions,

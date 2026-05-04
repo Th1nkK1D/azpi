@@ -1,6 +1,6 @@
 import type * as acp from "@agentclientprotocol/sdk";
 import type { AgentSessionEvent } from "@mariozechner/pi-coding-agent";
-import { mapToolCallEnd, mapToolCallStart, mapToolCallUpdate } from "./tool-mapper";
+import { mapToolCallEnd, mapToolCallStart, mapToolCallUpdate } from "./tool-call-mapper";
 
 /**
  * Maps a Pi AgentSessionEvent to an ACP SessionNotification, or null if the event

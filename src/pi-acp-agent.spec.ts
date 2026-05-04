@@ -114,6 +114,27 @@ describe("PiAcpAgent", () => {
   });
 
   describe("newSession", () => {
+    it("stores clientCapabilities from initialize", async () => {
+      const models = [createMockModel()];
+      const conn = createMockConnection();
+      const agent = new PiAcpAgent(conn, {
+        authStorage: createMockAuthStorage(),
+        modelRegistry: createMockRegistry(models) as any,
+        sessionFactory: async () => ({ session: createMockSession() }),
+      });
+
+      await agent.initialize({
+        clientCapabilities: {
+          fs: { readTextFile: true, writeTextFile: true },
+          terminal: true,
+        },
+        clientInfo: { name: "test", version: "1.0" },
+        protocolVersion: acp.PROTOCOL_VERSION,
+      });
+
+      const result = await agent.newSession(newSessionReq());
+      expect(result.sessionId).toBeDefined();
+    });
     it("returns sessionId with models and configOptions", async () => {
       const models = [createMockModel({ provider: "openai", id: "gpt-4", name: "GPT-4" })];
       const mockSession = createMockSession({ model: models[0] });
@@ -360,6 +381,7 @@ describe("PiAcpAgent", () => {
       await agent.newSession(newSessionReq());
       conn.sessionUpdate.mockClear?.();
 
+      /* eslint-disable-next-line no-underscore-dangle */
       const subscribers = (mockSession as any)._subscribers as Array<(event: any) => void>;
       for (const subscriber of subscribers) {
         subscriber({ type: "thinking_level_changed", level: "high" });

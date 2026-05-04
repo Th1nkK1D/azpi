@@ -27,11 +27,11 @@ export function mapToolCallStart(
 export function mapToolCallUpdate(
   event: AgentEvent & { type: "tool_execution_update" },
 ): acp.ToolCallUpdate {
-  const updateStr = safeJsonStringify(event.partialResult);
+  const textContent = extractTextFromToolResult(event.partialResult);
   return {
     content: [
       {
-        content: { text: updateStr, type: "text" },
+        content: { text: textContent, type: "text" },
         type: "content",
       },
     ],
@@ -46,17 +46,56 @@ export function mapToolCallUpdate(
 export function mapToolCallEnd(
   event: AgentEvent & { type: "tool_execution_end" },
 ): acp.ToolCallUpdate {
-  const resultStr = safeJsonStringify(event.result);
+  const textContent = extractTextFromToolResult(event.result);
   return {
     content: [
       {
-        content: { text: resultStr, type: "text" },
+        content: { text: textContent, type: "text" },
         type: "content",
       },
     ],
     status: event.isError ? "failed" : "completed",
     toolCallId: event.toolCallId,
   };
+}
+
+/**
+ * Best-effort extraction of the first text block from a Pi AgentToolResult.
+ *
+ * Pi tool results and partial results have the shape:
+ *   { content: [{ type: "text", text: "..." }], details: {...} }
+ *
+ * If the value matches this pattern we return the clean text directly;
+ * otherwise we fall back to a JSON representation.
+ */
+function extractTextFromToolResult(value: unknown): string {
+  if (!value || typeof value !== "object") {
+    return String(value ?? "");
+  }
+
+  const obj = value as Record<string, unknown>;
+
+  const content = obj.content;
+  if (Array.isArray(content) && content.length > 0) {
+    for (const block of content) {
+      if (
+        block &&
+        typeof block === "object" &&
+        (block as Record<string, unknown>).type === "text"
+      ) {
+        const text = (block as Record<string, unknown>).text;
+        if (typeof text === "string") {
+          return text;
+        }
+      }
+    }
+  }
+
+  if (typeof obj.error === "string") {
+    return obj.error;
+  }
+
+  return safeJsonStringify(value);
 }
 
 function safeJsonStringify(value: unknown): string {
