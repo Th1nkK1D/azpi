@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { buildStartupMessage } from "./startup";
+import { buildStartupMessage } from "./startup-message";
 import { name as AGENT_NAME, version as AGENT_VERSION } from "../package.json";
 import { VERSION as PI_VERSION } from "@mariozechner/pi-coding-agent";
 import type { AgentSession } from "@mariozechner/pi-coding-agent";
