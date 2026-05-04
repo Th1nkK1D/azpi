@@ -16,18 +16,23 @@ export function buildStartupMessage({ resourceLoader }: AgentSession): string {
     `Using Pi coding agent v${PI_VERSION}`,
     "",
     "**Contexts:**",
-    toBulletList(agentsFiles, (f) => f.path),
+    getSortedBulletList(agentsFiles, (f) => f.path),
     "",
     "**Extensions:**",
-    toBulletList(extensions, (e) => e.sourceInfo.source),
+    getSortedBulletList(extensions, (e) => e.sourceInfo.source),
     "",
     "**Skills:**",
-    toBulletList(skills, (s) => s.name),
+    getSortedBulletList(skills, (s) => s.name),
     "",
   ].join("\n");
 }
 
-function toBulletList<T>(items: T[], prop: (item: T) => string): string {
-  const list = items.map((item) => `- ${prop(item)}`).join("\n");
-  return list || "- _(none)_";
+function getSortedBulletList<T>(items: T[], getLabel: (item: T) => string): string {
+  return (
+    items
+      .map(getLabel)
+      .toSorted((a, z) => a.localeCompare(z))
+      .map((label) => `- ${label}`)
+      .join("\n") || "- _(none)_"
+  );
 }
