@@ -13,9 +13,7 @@ import type {
 import type { Model } from "@mariozechner/pi-ai";
 import { mapSessionEvent, mapStopReason } from "./event-bridge";
 import { buildModelConfigOption, buildModelState, buildThinkingLevelConfigOption } from "./config";
-
-const AGENT_NAME = "pi";
-const AGENT_VERSION = "0.1.0";
+import { name as AGENT_NAME, version as AGENT_VERSION } from "../package.json";
 
 export interface PiAcpAgentOptions {
   /** Optional createAgentSession overrides (model, tools, etc.) */
