@@ -17,6 +17,7 @@ import { convertPromptContent } from "./prompt-content";
 import { buildModelConfigOption, buildModelState, buildThinkingLevelConfigOption } from "./config";
 import { buildStartupMessage } from "./startup-message";
 import { name as AGENT_NAME, version as AGENT_VERSION } from "../package.json";
+import { findBuiltinCommand, parseSlashCommand, discoverCommands } from "./slash-commands";
 
 export interface PiAcpAgentOptions {
   /** Optional createAgentSession overrides (model, tools, etc.) */
@@ -109,7 +110,6 @@ export class PiAcpAgent implements acp.Agent {
     const cwd = params.cwd ?? process.cwd();
     const sessionId = crypto.randomUUID();
 
-    // Build proxy tools for ACP client capabilities the client advertised
     const proxyTools = createAcpProxyTools({
       connection: this.connection,
       sessionId,
@@ -150,7 +150,10 @@ export class PiAcpAgent implements acp.Agent {
 
     response.configOptions = this.buildConfigOptions(session);
 
-    // Send startup message (fire-and-forget; not awaited)
+    this.discoverAndEmitCommands(sessionId).catch(() => {
+      // Connection may be closing; ignore
+    });
+
     const message = buildStartupMessage(session);
     this.connection
       .sessionUpdate({
@@ -175,6 +178,30 @@ export class PiAcpAgent implements acp.Agent {
 
     const { text, images } = convertPromptContent(params.prompt, session.model);
 
+    const matchCommand = parseSlashCommand(text);
+    if (matchCommand) {
+      const builtin = findBuiltinCommand(matchCommand.name);
+      if (builtin) {
+        const result = await builtin.execute(session, matchCommand.args);
+
+        if (matchCommand.name === "reload") {
+          this.discoverAndEmitCommands(params.sessionId).catch(() => {
+            // Connection may be closing; ignore
+          });
+        }
+
+        await this.connection.sessionUpdate({
+          sessionId: params.sessionId,
+          update: {
+            content: { text: result.text, type: "text" },
+            sessionUpdate: "agent_message_chunk",
+          },
+        });
+
+        return { stopReason: "end_turn" };
+      }
+    }
+
     const controller = new AbortController();
     this.abortControllers.set(params.sessionId, controller);
 
@@ -182,7 +209,6 @@ export class PiAcpAgent implements acp.Agent {
       this.pendingPrompts.set(params.sessionId, { resolve });
     });
 
-    // Start the Pi prompt (fire-and-forget; resolution comes via agent_end event)
     session.prompt(text, images.length > 0 ? { images } : undefined).catch((_error: Error) => {
       const existing = this.pendingPrompts.get(params.sessionId);
       if (existing) {
@@ -295,6 +321,33 @@ export class PiAcpAgent implements acp.Agent {
         pending.resolve({ stopReason });
       }
     }
+  }
+
+  private async discoverAndEmitCommands(sessionId: string): Promise<void> {
+    const session = this.sessions.get(sessionId);
+    if (!session) return;
+
+    const availableCommands: acp.AvailableCommand[] = discoverCommands(session).map((cmd) => {
+      const acpCmd: acp.AvailableCommand = {
+        name: cmd.name,
+        description: cmd.description,
+      };
+
+      if (cmd.acceptsArgs) {
+        acpCmd.input = { hint: "Arguments for the command" };
+      }
+      return acpCmd;
+    });
+
+    const notification: acp.SessionNotification = {
+      sessionId,
+      update: {
+        sessionUpdate: "available_commands_update",
+        availableCommands,
+      },
+    };
+
+    await this.connection.sessionUpdate(notification);
   }
 
   private async cleanupSession(sessionId: string): Promise<void> {

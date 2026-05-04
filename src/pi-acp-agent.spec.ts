@@ -43,7 +43,13 @@ function createMockSession(overrides?: Partial<AgentSession>): AgentSession {
   const mockResourceLoader = {
     getAgentsFiles: () => ({ agentsFiles: [] }),
     getSkills: () => ({ skills: [], diagnostics: [] }),
+    getPrompts: () => ({ prompts: [], diagnostics: [] }),
+    getThemes: () => ({ themes: [], diagnostics: [] }),
     getExtensions: () => ({ extensions: [], errors: [] }),
+    getSystemPrompt: () => undefined,
+    getAppendSystemPrompt: () => [],
+    extendResources: mock(async () => {}),
+    reload: mock(async () => {}),
   };
 
   return {
@@ -162,6 +168,29 @@ describe("PiAcpAgent", () => {
       expect(result.configOptions![1]!.id).toBe("thinking-level");
       expect(result.configOptions![1]!.category).toBe("thought_level");
       expect(result.configOptions![1]!.currentValue).toBe("medium");
+    });
+
+    it("emits available_commands_update on newSession", async () => {
+      const models = [createMockModel()];
+      const mockSession = createMockSession({ model: models[0] });
+      const conn = createMockConnection();
+      const agent = new PiAcpAgent(conn, {
+        authStorage: createMockAuthStorage(),
+        modelRegistry: createMockRegistry(models) as any,
+        sessionFactory: async () => ({ session: mockSession }),
+      });
+
+      await agent.newSession(newSessionReq());
+
+      const calls = conn.sessionUpdate.mock.calls as any[];
+      const cmdUpdateCalls = calls.filter(
+        (call) => call[0].update.sessionUpdate === "available_commands_update",
+      );
+      expect(cmdUpdateCalls.length).toBe(1);
+      const cmds = cmdUpdateCalls[0][0].update.availableCommands;
+      expect(cmds.length).toBeGreaterThanOrEqual(5);
+      expect(cmds.map((c: any) => c.name)).toContain("name");
+      expect(cmds.map((c: any) => c.name)).toContain("reload");
     });
 
     it("falls back to first available model when session has no model", async () => {
@@ -476,5 +505,101 @@ describe("mapSessionEvent", () => {
     expect(result).not.toBeNull();
     expect(result!.update.sessionUpdate).toBe("tool_call");
     expect((result!.update as any).toolCallId).toBe("1");
+  });
+});
+
+function promptReq(sessionId: string, text: string): acp.PromptRequest {
+  return {
+    sessionId,
+    prompt: [{ text, type: "text" }],
+  };
+}
+
+describe("PiAcpAgent slash commands", () => {
+  it("handles /session as a built-in command", async () => {
+    const models = [createMockModel()];
+    const mockSession = createMockSession({
+      model: models[0],
+      sessionName: "test-sesh",
+      getSessionStats: () => ({
+        sessionFile: "/tmp/test.jsonl",
+        sessionId: "abc-123",
+        userMessages: 2,
+        assistantMessages: 1,
+        toolCalls: 3,
+        toolResults: 3,
+        totalMessages: 3,
+        tokens: { total: 500, input: 300, output: 200, cacheRead: 0, cacheWrite: 0 },
+        cost: 0.001,
+        contextUsage: { tokens: 500, contextWindow: 128000, percent: 0.39 },
+      }),
+    });
+    const conn = createMockConnection();
+    const agent = new PiAcpAgent(conn, {
+      authStorage: createMockAuthStorage(),
+      modelRegistry: createMockRegistry(models) as any,
+      sessionFactory: async () => ({ session: mockSession }),
+    });
+
+    const newResult = await agent.newSession(newSessionReq());
+    conn.sessionUpdate.mockClear?.();
+
+    const result = await agent.prompt(promptReq(newResult.sessionId, "/session"));
+    expect(result.stopReason).toBe("end_turn");
+
+    expect(mockSession.prompt).not.toHaveBeenCalled();
+
+    const calls = conn.sessionUpdate.mock.calls as any[];
+    const msgCalls = calls.filter((call) => call[0].update.sessionUpdate === "agent_message_chunk");
+    expect(msgCalls.length).toBe(1);
+    expect(msgCalls[0][0].update.content.text).toContain("abc-123");
+  });
+
+  it("passes non-slash commands through to session.prompt", async () => {
+    const models = [createMockModel()];
+    const mockSession = createMockSession({ model: models[0] });
+    const conn = createMockConnection();
+    const agent = new PiAcpAgent(conn, {
+      authStorage: createMockAuthStorage(),
+      modelRegistry: createMockRegistry(models) as any,
+      sessionFactory: async () => ({ session: mockSession }),
+    });
+
+    const newResult = await agent.newSession(newSessionReq());
+
+    /* eslint-disable-next-line no-underscore-dangle */
+    const subscribers = (mockSession as any)._subscribers as Array<(event: any) => void>;
+    setTimeout(() => {
+      for (const sub of subscribers) {
+        sub({ type: "agent_end", messages: [{ stopReason: "end_turn" }] });
+      }
+    }, 5);
+
+    await agent.prompt(promptReq(newResult.sessionId, "Hello, how are you?"));
+    expect(mockSession.prompt).toHaveBeenCalled();
+  });
+
+  it("passes unknown slash commands through to session.prompt", async () => {
+    const models = [createMockModel()];
+    const mockSession = createMockSession({ model: models[0] });
+    const conn = createMockConnection();
+    const agent = new PiAcpAgent(conn, {
+      authStorage: createMockAuthStorage(),
+      modelRegistry: createMockRegistry(models) as any,
+      sessionFactory: async () => ({ session: mockSession }),
+    });
+
+    const newResult = await agent.newSession(newSessionReq());
+
+    /* eslint-disable-next-line no-underscore-dangle */
+    const subscribers = (mockSession as any)._subscribers as Array<(event: any) => void>;
+    setTimeout(() => {
+      for (const sub of subscribers) {
+        sub({ type: "agent_end", messages: [{ stopReason: "end_turn" }] });
+      }
+    }, 5);
+
+    await agent.prompt(promptReq(newResult.sessionId, "/unknown arg"));
+    expect(mockSession.prompt).toHaveBeenCalled();
   });
 });
