@@ -112,28 +112,37 @@ export class PiAcpAgent implements acp.Agent {
   async newSession(params: acp.NewSessionRequest): Promise<acp.NewSessionResponse> {
     const cwd = params.cwd ?? process.cwd();
 
-    const proxyTools = createAcpProxyTools({
-      connection: this.connection,
-      sessionId: "__placeholder__",
-      capabilities: this.clientCapabilities,
-      cwd,
-    });
+    let session: AgentSession;
+    let sessionId: string;
 
-    const { session } = this.options.sessionFactory
-      ? await this.options.sessionFactory(cwd)
-      : await createAgentSession({
-          cwd,
-          sessionManager: SessionManager.create(cwd),
-          // Custom tools with the same name override built-ins;
-          // the allowlist keeps all 4 tool slots regardless of which we override.
-          tools: ["read", "bash", "edit", "write"],
-          customTools: proxyTools,
-          authStorage: this.authStorage,
-          modelRegistry: this.modelRegistry,
-          ...this.options.sessionOptions,
-        });
+    if (this.options.sessionFactory) {
+      const result = await this.options.sessionFactory(cwd);
+      session = result.session;
+      sessionId = session.sessionId;
+    } else {
+      const sessionManager = SessionManager.create(cwd);
+      sessionId = sessionManager.getSessionId();
 
-    const sessionId = session.sessionId;
+      const proxyTools = createAcpProxyTools({
+        connection: this.connection,
+        sessionId,
+        capabilities: this.clientCapabilities,
+        cwd,
+      });
+
+      const result = await createAgentSession({
+        cwd,
+        sessionManager,
+        // Custom tools with the same name override built-ins;
+        // the allowlist keeps all 4 tool slots regardless of which we override.
+        tools: ["read", "bash", "edit", "write"],
+        customTools: proxyTools,
+        authStorage: this.authStorage,
+        modelRegistry: this.modelRegistry,
+        ...this.options.sessionOptions,
+      });
+      session = result.session;
+    }
 
     if (!session.model && this.availableModels.length > 0) {
       await session.setModel(this.availableModels[0]!);

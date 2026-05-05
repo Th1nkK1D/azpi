@@ -191,7 +191,6 @@ describe("replaySessionHistory", () => {
       update: {
         sessionUpdate: "user_message_chunk",
         content: { type: "text", text: "Hello, world!" },
-        delta: false,
       },
     });
   });
@@ -210,7 +209,6 @@ describe("replaySessionHistory", () => {
       update: {
         sessionUpdate: "agent_message_chunk",
         content: { type: "text", text: "Hi there!" },
-        delta: false,
       },
     });
   });

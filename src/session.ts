@@ -61,6 +61,7 @@ export async function replaySessionHistory(
   connection: acp.AgentSideConnection,
 ): Promise<void> {
   const entries = session.sessionManager.getEntries();
+  const updates: Promise<void>[] = [];
 
   for (const entry of entries) {
     if (entry.type !== "message") continue;
@@ -75,25 +76,29 @@ export async function replaySessionHistory(
     if (!text) continue;
 
     if (role === "user") {
-      await connection.sessionUpdate({
-        sessionId,
-        update: {
-          sessionUpdate: "user_message_chunk",
-          content: { type: "text", text },
-          delta: false,
-        },
-      });
+      updates.push(
+        connection.sessionUpdate({
+          sessionId,
+          update: {
+            sessionUpdate: "user_message_chunk",
+            content: { type: "text", text },
+          },
+        }),
+      );
     } else {
-      await connection.sessionUpdate({
-        sessionId,
-        update: {
-          sessionUpdate: "agent_message_chunk",
-          content: { type: "text", text },
-          delta: false,
-        },
-      });
+      updates.push(
+        connection.sessionUpdate({
+          sessionId,
+          update: {
+            sessionUpdate: "agent_message_chunk",
+            content: { type: "text", text },
+          },
+        }),
+      );
     }
   }
+
+  await Promise.all(updates);
 }
 
 function extractTextContent(message: any): string | undefined {
