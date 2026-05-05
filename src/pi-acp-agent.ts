@@ -41,12 +41,12 @@ import type {
 import type { Model } from "@mariozechner/pi-ai";
 import { createAcpProxyTools } from "./client-tool-proxy";
 import { mapSessionEvent, mapStopReason } from "./event-bridge";
-import { convertPromptContent } from "./prompt-content";
+import { convertPromptContent, deriveSessionName } from "./prompt-content";
 import { buildModelConfigOption, buildModelState, buildThinkingLevelConfigOption } from "./config";
 import { buildStartupMessage } from "./startup-message";
 import { name as AGENT_NAME, version as AGENT_VERSION } from "../package.json";
 import { findBuiltinCommand, parseSlashCommand, discoverCommands } from "./slash-commands";
-import { SessionResolver, replaySessionHistory, deriveSessionName } from "./session";
+import { SessionResolver, replaySessionHistory } from "./session";
 
 export interface PiAcpAgentOptions {
   /** Optional createAgentSession overrides (model, tools, etc.) */
@@ -248,7 +248,7 @@ export class PiAcpAgent implements Agent {
     }
 
     if (!session.sessionName && !matchCommand) {
-      const name = deriveSessionName(text);
+      const name = deriveSessionName(params.prompt);
       if (name) {
         session.setSessionName(name);
       }

@@ -2,6 +2,8 @@ import { RequestError } from "@agentclientprotocol/sdk";
 import type { ContentBlock } from "@agentclientprotocol/sdk";
 import type { Model, ImageContent } from "@mariozechner/pi-ai";
 
+const MAX_SESSION_NAME_LENGTH = 50;
+
 /**
  * Converts ACP ContentBlock[] into text + images for Pi session.prompt().
  *
@@ -80,4 +82,50 @@ function stripDataUri(data: string): string {
     return data.slice(idx + 1);
   }
   return data;
+}
+
+/**
+ * Derives a session name from the first line of a prompt text.
+ * Returns undefined if the line is empty or starts with "/".
+ */
+export function deriveSessionName(content: ContentBlock[]): string | undefined {
+  const cleanText = content
+    .reduce((str, block) => str + getBlockText(block), "")
+    .trim()
+    .split("\n")[0];
+
+  if (!cleanText || cleanText.startsWith("/")) {
+    return undefined;
+  }
+  if (cleanText.length <= MAX_SESSION_NAME_LENGTH) {
+    return cleanText;
+  }
+  return cleanText.slice(0, MAX_SESSION_NAME_LENGTH).trimEnd() + "...";
+}
+
+function getBlockText(block: ContentBlock): string {
+  let text: string | null | undefined;
+
+  switch (block.type) {
+    case "text":
+      return block.text;
+    case "image":
+      text = getFileNameFromURI(block.uri) || block.mimeType;
+      break;
+    case "audio":
+      text = block.mimeType;
+      break;
+    case "resource_link":
+      text = getFileNameFromURI(block.uri);
+      break;
+    case "resource":
+      text = getFileNameFromURI(block.resource.uri);
+      break;
+  }
+
+  return `[${text || block.type}]`;
+}
+
+function getFileNameFromURI(uri?: string | null) {
+  return uri?.split("/").at(-1);
 }

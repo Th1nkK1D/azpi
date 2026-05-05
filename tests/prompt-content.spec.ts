@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { RequestError } from "@agentclientprotocol/sdk";
 import type { ContentBlock } from "@agentclientprotocol/sdk";
-import { convertPromptContent } from "../src/prompt-content";
+import { convertPromptContent, deriveSessionName } from "../src/prompt-content";
 import type { Model } from "@mariozechner/pi-ai";
 
 function createMockModel(overrides?: Partial<Model<any>>): Model<any> {
@@ -238,5 +238,66 @@ describe("convertPromptContent", () => {
     const result = convertPromptContent([], visionModel);
     expect(result.text).toBe("");
     expect(result.images).toHaveLength(0);
+  });
+});
+
+describe("deriveSessionName", () => {
+  const createTextPrompt = (text: string): ContentBlock[] => [{ type: "text", text }];
+
+  it("returns the trimmed first line of text", () => {
+    expect(deriveSessionName(createTextPrompt("Hello, how are you?"))).toBe("Hello, how are you?");
+  });
+
+  it("truncates text longer than 50 characters", () => {
+    const longText = "a".repeat(100);
+    expect(deriveSessionName(createTextPrompt(longText))).toBe("a".repeat(50) + "...");
+  });
+
+  it("uses only the first line for session name", () => {
+    expect(deriveSessionName(createTextPrompt("First line\nSecond line"))).toBe("First line");
+  });
+
+  it("returns undefined for slash commands", () => {
+    expect(deriveSessionName(createTextPrompt("/unknown arg"))).toBeUndefined();
+  });
+
+  it("returns undefined for empty text", () => {
+    expect(deriveSessionName(createTextPrompt(""))).toBeUndefined();
+  });
+
+  it("returns undefined for whitespace-only text", () => {
+    expect(deriveSessionName(createTextPrompt("   \n  "))).toBeUndefined();
+  });
+
+  it("trims leading and trailing whitespace from first line", () => {
+    expect(deriveSessionName(createTextPrompt("  Hello world  "))).toBe("Hello world");
+  });
+
+  it("returns undefined when first line after trimming starts with /", () => {
+    expect(deriveSessionName(createTextPrompt("/help me"))).toBeUndefined();
+  });
+
+  it("returns text at 51 chars with ellipsis", () => {
+    expect(deriveSessionName(createTextPrompt("a".repeat(51)))).toBe("a".repeat(50) + "...");
+  });
+
+  it("parsed content type with uri as filename", () => {
+    expect(
+      deriveSessionName([
+        { type: "text", text: "Read " },
+        {
+          type: "resource",
+          resource: {
+            text: '{ \n  "name":  "azpi", \n  "version":  "0.1.0", \n  "private":  true, \n  "type":  "module", \n  "scripts":  { \n    "prepare":  "husky", \n    "test":  "bun test", \n    "build":  "bun run build: binary && bun run build: assets", \n    "build: binary":  "bun build src/index.ts --compile --minify --outfile dist/azpi", \n    "build: assets":  "cp -r package.json node_modules/@mariozechner/pi-coding-agent/dist/core/export-html node_modules/@mariozechner/pi-coding-agent/dist/modes/interactive/theme ./dist/", \n    "format":  "oxfmt --write", \n    "lint":  "oxlint --fix", \n    "check":  "tsc --noEmit"\n   }, \n  "dependencies":  { \n    "@agentclientprotocol/sdk":  "^0.21.0", \n    "@mariozechner/pi-ai":  "^0.73.0", \n    "@mariozechner/pi-coding-agent":  "^0.73.0"\n   }, \n  "devDependencies":  { \n    "@types/bun":  "latest", \n    "husky":  "^9.1.7", \n    "lint-staged":  "^16.4.0", \n    "oxfmt":  "^0.47.0", \n    "oxlint":  "^1.62.0"\n   }, \n  "peerDependencies":  { \n    "typescript":  "^5"\n   }, \n  "lint-staged":  { \n    "*.{ ts, tsx, js, jsx, mjs, cjs }":  [\n      "oxlint --fix"\n    ], \n    "*":  [\n      "oxfmt --write"\n    ]\n   }\n }\n',
+            uri: "file: ///home/lkz/Repositories/azpi/package.json",
+          },
+        },
+        {
+          type: "audio",
+          data: "audioBase64",
+          mimeType: "audio/wav",
+        },
+      ]),
+    ).toBe("Read [package.json][audio/wav]");
   });
 });
