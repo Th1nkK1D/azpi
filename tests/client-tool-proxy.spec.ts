@@ -1,6 +1,6 @@
 import { describe, expect, it, mock } from "bun:test";
 import * as acp from "@agentclientprotocol/sdk";
-import { createAcpProxyTools } from "./client-tool-proxy";
+import { createAcpProxyTools } from "../src/client-tool-proxy";
 
 function mockConnection(overrides?: Partial<acp.AgentSideConnection>): acp.AgentSideConnection {
   return {

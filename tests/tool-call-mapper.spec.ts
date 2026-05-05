@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { mapToolCallEnd, mapToolCallStart, mapToolCallUpdate } from "./tool-call-mapper";
+import { mapToolCallEnd, mapToolCallStart, mapToolCallUpdate } from "../src/tool-call-mapper";
 
 describe("tool-mapper", () => {
   describe("mapToolCallStart", () => {

@@ -4,7 +4,7 @@ import {
   builtinCommands,
   findBuiltinCommand,
   discoverCommands,
-} from "./slash-commands";
+} from "../src/slash-commands";
 import type { AgentSession } from "@mariozechner/pi-coding-agent";
 import type { Model } from "@mariozechner/pi-ai";
 

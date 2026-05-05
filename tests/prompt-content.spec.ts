@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import * as acp from "@agentclientprotocol/sdk";
-import { convertPromptContent } from "./prompt-content";
+import { convertPromptContent } from "../src/prompt-content";
 import type { Model } from "@mariozechner/pi-ai";
 
 function createMockModel(overrides?: Partial<Model<any>>): Model<any> {

@@ -1,7 +1,11 @@
 import { describe, expect, it, mock } from "bun:test";
 import type { AgentSession } from "@mariozechner/pi-coding-agent";
 import type { Model } from "@mariozechner/pi-ai";
-import { buildModelConfigOption, buildModelState, buildThinkingLevelConfigOption } from "./config";
+import {
+  buildModelConfigOption,
+  buildModelState,
+  buildThinkingLevelConfigOption,
+} from "../src/config";
 
 function createMockModel(overrides?: Partial<Model<any>>): Model<any> {
   return {

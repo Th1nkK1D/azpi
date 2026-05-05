@@ -261,15 +261,19 @@ export class PiAcpAgent implements acp.Agent {
       cwd,
     });
 
-    const { session } = await createAgentSession({
-      cwd,
-      sessionManager: isNewSession ? SessionManager.create(cwd) : SessionManager.open(sessionPath!),
-      tools: ["read", "bash", "edit", "write"],
-      customTools: proxyTools,
-      authStorage: this.authStorage,
-      modelRegistry: this.modelRegistry,
-      ...this.options.sessionOptions,
-    });
+    const { session } = this.options.sessionFactory
+      ? await this.options.sessionFactory(cwd)
+      : await createAgentSession({
+          cwd,
+          sessionManager: isNewSession
+            ? SessionManager.create(cwd)
+            : SessionManager.open(sessionPath!),
+          tools: ["read", "bash", "edit", "write"],
+          customTools: proxyTools,
+          authStorage: this.authStorage,
+          modelRegistry: this.modelRegistry,
+          ...this.options.sessionOptions,
+        });
 
     if (session.sessionFile) {
       this.sessionResolver.registerSession(sessionId, session.sessionFile);
@@ -315,15 +319,19 @@ export class PiAcpAgent implements acp.Agent {
       cwd,
     });
 
-    const { session } = await createAgentSession({
-      cwd,
-      sessionManager: isNewSession ? SessionManager.create(cwd) : SessionManager.open(sessionPath!),
-      tools: ["read", "bash", "edit", "write"],
-      customTools: proxyTools,
-      authStorage: this.authStorage,
-      modelRegistry: this.modelRegistry,
-      ...this.options.sessionOptions,
-    });
+    const { session } = this.options.sessionFactory
+      ? await this.options.sessionFactory(cwd)
+      : await createAgentSession({
+          cwd,
+          sessionManager: isNewSession
+            ? SessionManager.create(cwd)
+            : SessionManager.open(sessionPath!),
+          tools: ["read", "bash", "edit", "write"],
+          customTools: proxyTools,
+          authStorage: this.authStorage,
+          modelRegistry: this.modelRegistry,
+          ...this.options.sessionOptions,
+        });
 
     if (session.sessionFile) {
       this.sessionResolver.registerSession(sessionId, session.sessionFile);

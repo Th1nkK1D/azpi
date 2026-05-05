@@ -1,11 +1,9 @@
 import { describe, expect, it, mock } from "bun:test";
 import * as acp from "@agentclientprotocol/sdk";
-import { PiAcpAgent } from "./pi-acp-agent";
-import { mapSessionEvent, mapStopReason } from "./event-bridge";
+import { PiAcpAgent } from "../src/pi-acp-agent";
+import { mapSessionEvent, mapStopReason } from "../src/event-bridge";
 import type { AgentSession } from "@mariozechner/pi-coding-agent";
 import type { Model } from "@mariozechner/pi-ai";
-
-// ─── Helpers ───────────────────────────────────────────────────────
 
 function createMockConnection(): acp.AgentSideConnection & {
   sessionUpdate: ReturnType<typeof mock>;
@@ -272,7 +270,7 @@ describe("PiAcpAgent", () => {
       });
 
       await agent.newSession(newSessionReq());
-      await expect(
+      expect(
         agent.unstable_setSessionModel({
           sessionId: "test-session",
           modelId: "unknown/model",
@@ -291,7 +289,7 @@ describe("PiAcpAgent", () => {
       });
 
       await agent.newSession(newSessionReq());
-      await expect(
+      expect(
         agent.unstable_setSessionModel({
           sessionId: "test-session",
           modelId: "no-slash",
@@ -383,7 +381,7 @@ describe("PiAcpAgent", () => {
       });
 
       await agent.newSession(newSessionReq());
-      await expect(
+      expect(
         agent.setSessionConfigOption({
           sessionId: "test-session",
           configId: "model",
@@ -403,7 +401,7 @@ describe("PiAcpAgent", () => {
       });
 
       await agent.newSession(newSessionReq());
-      await expect(
+      expect(
         agent.setSessionConfigOption({
           sessionId: "test-session",
           configId: "unknown-option",
@@ -647,7 +645,7 @@ describe("PiAcpAgent resumeSession", () => {
       sessionFactory: async () => ({ session: mockSession }),
     });
 
-    const result = await agent.unstable_resumeSession({ sessionId: "nonexistent" });
+    const result = await agent.unstable_resumeSession({ sessionId: "nonexistent", cwd: "" });
     expect(result).toEqual({});
   });
 });

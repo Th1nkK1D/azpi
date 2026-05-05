@@ -1,5 +1,5 @@
 import { describe, expect, it, mock, beforeEach } from "bun:test";
-import { SessionResolver, replaySessionHistory } from "./session";
+import { SessionResolver, replaySessionHistory } from "../src/session";
 import { SessionManager } from "@mariozechner/pi-coding-agent";
 import type { AgentSession } from "@mariozechner/pi-coding-agent";
 import type * as acp from "@agentclientprotocol/sdk";

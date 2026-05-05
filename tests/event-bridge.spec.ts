@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import type { SessionConfigOption } from "@agentclientprotocol/sdk";
 import type { StopReason } from "@agentclientprotocol/sdk";
 import type { AgentSessionEvent } from "@mariozechner/pi-coding-agent";
-import { mapFinalContent, mapSessionEvent, mapStopReason } from "./event-bridge";
+import { mapFinalContent, mapSessionEvent, mapStopReason } from "../src/event-bridge";
 
 const SID = "test-session";
 
