@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import * as acp from "@agentclientprotocol/sdk";
+import { RequestError } from "@agentclientprotocol/sdk";
+import type { ContentBlock } from "@agentclientprotocol/sdk";
 import { convertPromptContent } from "../src/prompt-content";
 import type { Model } from "@mariozechner/pi-ai";
 
@@ -32,7 +33,7 @@ describe("convertPromptContent", () => {
   });
 
   it("extracts text from text blocks", () => {
-    const blocks: acp.ContentBlock[] = [
+    const blocks: ContentBlock[] = [
       { text: "Hello ", type: "text" },
       { text: "world", type: "text" },
     ];
@@ -42,7 +43,7 @@ describe("convertPromptContent", () => {
   });
 
   it("converts image blocks when model supports vision", () => {
-    const blocks: acp.ContentBlock[] = [
+    const blocks: ContentBlock[] = [
       { text: "Look at this:", type: "text" },
       {
         type: "image",
@@ -61,7 +62,7 @@ describe("convertPromptContent", () => {
   });
 
   it("strips data: URI prefix from image block data", () => {
-    const blocks: acp.ContentBlock[] = [
+    const blocks: ContentBlock[] = [
       {
         type: "image",
         data: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAE",
@@ -78,7 +79,7 @@ describe("convertPromptContent", () => {
   });
 
   it("strips data: URI prefix from image blob resource", () => {
-    const blocks: acp.ContentBlock[] = [
+    const blocks: ContentBlock[] = [
       {
         type: "resource",
         resource: {
@@ -98,19 +99,19 @@ describe("convertPromptContent", () => {
   });
 
   it("throws when model does not support images", () => {
-    const blocks: acp.ContentBlock[] = [
+    const blocks: ContentBlock[] = [
       {
         type: "image",
         data: "base64data",
         mimeType: "image/png",
       },
     ];
-    expect(() => convertPromptContent(blocks, textOnlyModel)).toThrow(acp.RequestError);
-    expect(() => convertPromptContent(blocks, undefined)).toThrow(acp.RequestError);
+    expect(() => convertPromptContent(blocks, textOnlyModel)).toThrow(RequestError);
+    expect(() => convertPromptContent(blocks, undefined)).toThrow(RequestError);
   });
 
   it("embeds text resource as fenced code block", () => {
-    const blocks: acp.ContentBlock[] = [
+    const blocks: ContentBlock[] = [
       {
         type: "resource",
         resource: {
@@ -127,7 +128,7 @@ describe("convertPromptContent", () => {
   });
 
   it("converts image blob resource to ImageContent", () => {
-    const blocks: acp.ContentBlock[] = [
+    const blocks: ContentBlock[] = [
       {
         type: "resource",
         resource: {
@@ -147,7 +148,7 @@ describe("convertPromptContent", () => {
   });
 
   it("throws for image blob resource when model lacks vision", () => {
-    const blocks: acp.ContentBlock[] = [
+    const blocks: ContentBlock[] = [
       {
         type: "resource",
         resource: {
@@ -157,11 +158,11 @@ describe("convertPromptContent", () => {
         },
       },
     ];
-    expect(() => convertPromptContent(blocks, textOnlyModel)).toThrow(acp.RequestError);
+    expect(() => convertPromptContent(blocks, textOnlyModel)).toThrow(RequestError);
   });
 
   it("converts non-image blob resource to placeholder", () => {
-    const blocks: acp.ContentBlock[] = [
+    const blocks: ContentBlock[] = [
       {
         type: "resource",
         resource: {
@@ -177,7 +178,7 @@ describe("convertPromptContent", () => {
   });
 
   it("converts resource_link to placeholder", () => {
-    const blocks: acp.ContentBlock[] = [
+    const blocks: ContentBlock[] = [
       {
         type: "resource_link",
         name: "README.md",
@@ -190,7 +191,7 @@ describe("convertPromptContent", () => {
   });
 
   it("converts audio block to placeholder text", () => {
-    const blocks: acp.ContentBlock[] = [
+    const blocks: ContentBlock[] = [
       {
         type: "audio",
         data: "audioBase64",
@@ -203,7 +204,7 @@ describe("convertPromptContent", () => {
   });
 
   it("handles mixed content blocks in order", () => {
-    const blocks: acp.ContentBlock[] = [
+    const blocks: ContentBlock[] = [
       { text: "Analyze this code:", type: "text" },
       {
         type: "resource",

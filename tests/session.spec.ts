@@ -2,7 +2,7 @@ import { describe, expect, it, mock, beforeEach } from "bun:test";
 import { SessionResolver, replaySessionHistory } from "../src/session";
 import { SessionManager } from "@mariozechner/pi-coding-agent";
 import type { AgentSession } from "@mariozechner/pi-coding-agent";
-import type * as acp from "@agentclientprotocol/sdk";
+import type { AgentSideConnection } from "@agentclientprotocol/sdk";
 
 mock.module("@mariozechner/pi-coding-agent", () => ({
   SessionManager: {
@@ -130,7 +130,7 @@ describe("SessionResolver", () => {
   });
 });
 
-function createMockConnection(): acp.AgentSideConnection & {
+function createMockConnection(): AgentSideConnection & {
   sessionUpdate: ReturnType<typeof mock>;
 } {
   const sessionUpdate = mock(async () => {});
@@ -141,7 +141,7 @@ function createMockConnection(): acp.AgentSideConnection & {
     requestPermission: mock(async () => ({ action: "allow" as const })),
     sessionUpdate,
     signal: new AbortController().signal,
-  } as unknown as acp.AgentSideConnection & { sessionUpdate: ReturnType<typeof mock> };
+  } as unknown as AgentSideConnection & { sessionUpdate: ReturnType<typeof mock> };
 }
 
 function createMockSessionWithEntries(entries: any[]): AgentSession {

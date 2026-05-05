@@ -1,8 +1,8 @@
 import { describe, expect, it, mock } from "bun:test";
-import * as acp from "@agentclientprotocol/sdk";
+import type { AgentSideConnection, TerminalHandle } from "@agentclientprotocol/sdk";
 import { createAcpProxyTools } from "../src/client-tool-proxy";
 
-function mockConnection(overrides?: Partial<acp.AgentSideConnection>): acp.AgentSideConnection {
+function mockConnection(overrides?: Partial<AgentSideConnection>): AgentSideConnection {
   return {
     readTextFile: mock().mockResolvedValue({ content: "" }),
     writeTextFile: mock().mockResolvedValue({}),
@@ -18,10 +18,10 @@ function mockConnection(overrides?: Partial<acp.AgentSideConnection>): acp.Agent
       return Promise.resolve();
     },
     ...overrides,
-  } as unknown as acp.AgentSideConnection;
+  } as unknown as AgentSideConnection;
 }
 
-function mockTerminalHandle(overrides?: Partial<acp.TerminalHandle>): acp.TerminalHandle {
+function mockTerminalHandle(overrides?: Partial<TerminalHandle>): TerminalHandle {
   return {
     id: "term-1",
     currentOutput: mock().mockResolvedValue({
@@ -34,7 +34,7 @@ function mockTerminalHandle(overrides?: Partial<acp.TerminalHandle>): acp.Termin
     release: mock().mockResolvedValue({}),
     [Symbol.asyncDispose]: mock().mockResolvedValue(undefined),
     ...overrides,
-  } as unknown as acp.TerminalHandle;
+  } as unknown as TerminalHandle;
 }
 
 describe("createAcpProxyTools", () => {

@@ -1,5 +1,5 @@
 /* eslint-disable no-await-in-loop */
-import * as acp from "@agentclientprotocol/sdk";
+import type { AgentSideConnection, ClientCapabilities } from "@agentclientprotocol/sdk";
 import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
 import { defineTool } from "@mariozechner/pi-coding-agent";
 import { Type } from "typebox";
@@ -37,11 +37,11 @@ const ONE_BASED_LINE_OFFSET = 1;
 
 export interface AcpProxyToolOptions {
   /** The ACP agent-side connection */
-  connection: acp.AgentSideConnection;
+  connection: AgentSideConnection;
   /** Current session ID */
   sessionId: string;
   /** Client capabilities from initialize */
-  capabilities: acp.ClientCapabilities | undefined;
+  capabilities: ClientCapabilities | undefined;
   /** Working directory for resolving relative paths */
   cwd: string;
 }
@@ -102,7 +102,7 @@ function applyOffsetLimit(content: string, offset?: number, limit?: number): str
 }
 
 function createReadProxy(
-  connection: acp.AgentSideConnection,
+  connection: AgentSideConnection,
   sessionId: string,
   cwd: string,
 ): ToolDefinition {
@@ -131,7 +131,7 @@ function createReadProxy(
 }
 
 function createWriteProxy(
-  connection: acp.AgentSideConnection,
+  connection: AgentSideConnection,
   sessionId: string,
   cwd: string,
 ): ToolDefinition {
@@ -163,7 +163,7 @@ function createWriteProxy(
 }
 
 function createEditProxy(
-  connection: acp.AgentSideConnection,
+  connection: AgentSideConnection,
   sessionId: string,
   cwd: string,
 ): ToolDefinition {
@@ -213,7 +213,7 @@ function createEditProxy(
 }
 
 function createBashProxy(
-  connection: acp.AgentSideConnection,
+  connection: AgentSideConnection,
   sessionId: string,
   cwd: string,
 ): ToolDefinition {

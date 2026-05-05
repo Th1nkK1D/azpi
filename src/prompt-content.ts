@@ -1,4 +1,5 @@
-import * as acp from "@agentclientprotocol/sdk";
+import { RequestError } from "@agentclientprotocol/sdk";
+import type { ContentBlock } from "@agentclientprotocol/sdk";
 import type { Model, ImageContent } from "@mariozechner/pi-ai";
 
 /**
@@ -12,7 +13,7 @@ import type { Model, ImageContent } from "@mariozechner/pi-ai";
  * - `resource_link` → placeholder text in prompt string
  */
 export function convertPromptContent(
-  content: acp.ContentBlock[],
+  content: ContentBlock[],
   model: Model<any> | undefined,
 ): { text: string; images: ImageContent[] } {
   const textParts: string[] = [];
@@ -27,7 +28,7 @@ export function convertPromptContent(
       }
       case "image": {
         if (!supportsImage) {
-          throw acp.RequestError.invalidParams(
+          throw RequestError.invalidParams(
             `Current model (${model?.id ?? "unknown"}) does not support images`,
           );
         }
@@ -50,7 +51,7 @@ export function convertPromptContent(
         } else if ("blob" in res && typeof res.blob === "string") {
           if (res.mimeType?.startsWith("image/")) {
             if (!supportsImage) {
-              throw acp.RequestError.invalidParams(
+              throw RequestError.invalidParams(
                 `Current model (${model?.id ?? "unknown"}) does not support images`,
               );
             }

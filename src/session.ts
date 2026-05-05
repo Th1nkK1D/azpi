@@ -1,6 +1,6 @@
 import { SessionManager } from "@mariozechner/pi-coding-agent";
 import type { AgentSession } from "@mariozechner/pi-coding-agent";
-import type * as acp from "@agentclientprotocol/sdk";
+import type { AgentSideConnection } from "@agentclientprotocol/sdk";
 
 /**
  * Resolves a Pi session UUID to its JSONL file path.
@@ -58,7 +58,7 @@ export class SessionResolver {
 export async function replaySessionHistory(
   session: AgentSession,
   sessionId: string,
-  connection: acp.AgentSideConnection,
+  connection: AgentSideConnection,
 ): Promise<void> {
   const entries = session.sessionManager.getEntries();
   const updates: Promise<void>[] = [];

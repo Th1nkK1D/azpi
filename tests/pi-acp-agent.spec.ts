@@ -1,11 +1,16 @@
 import { describe, expect, it, mock } from "bun:test";
-import * as acp from "@agentclientprotocol/sdk";
+import { PROTOCOL_VERSION, RequestError } from "@agentclientprotocol/sdk";
+import type {
+  AgentSideConnection,
+  NewSessionRequest,
+  PromptRequest,
+} from "@agentclientprotocol/sdk";
 import { PiAcpAgent } from "../src/pi-acp-agent";
 import { mapSessionEvent, mapStopReason } from "../src/event-bridge";
 import type { AgentSession } from "@mariozechner/pi-coding-agent";
 import type { Model } from "@mariozechner/pi-ai";
 
-function createMockConnection(): acp.AgentSideConnection & {
+function createMockConnection(): AgentSideConnection & {
   sessionUpdate: ReturnType<typeof mock>;
 } {
   const sessionUpdate = mock(async () => {});
@@ -16,7 +21,7 @@ function createMockConnection(): acp.AgentSideConnection & {
     requestPermission: mock(async () => ({ action: "allow" as const })),
     sessionUpdate,
     signal: new AbortController().signal,
-  } as unknown as acp.AgentSideConnection & { sessionUpdate: ReturnType<typeof mock> };
+  } as unknown as AgentSideConnection & { sessionUpdate: ReturnType<typeof mock> };
 }
 
 function createMockModel(overrides?: Partial<Model<any>>): Model<any> {
@@ -94,7 +99,7 @@ function createMockAuthStorage() {
   return {} as any;
 }
 
-function newSessionReq(): acp.NewSessionRequest {
+function newSessionReq(): NewSessionRequest {
   return { cwd: "/test", mcpServers: [] };
 }
 
@@ -106,9 +111,9 @@ describe("PiAcpAgent", () => {
       const result = await agent.initialize({
         clientCapabilities: {},
         clientInfo: { name: "test-client", version: "1.0.0" },
-        protocolVersion: acp.PROTOCOL_VERSION,
+        protocolVersion: PROTOCOL_VERSION,
       });
-      expect(result.protocolVersion).toBe(acp.PROTOCOL_VERSION);
+      expect(result.protocolVersion).toBe(PROTOCOL_VERSION);
       expect(result.agentInfo?.name).toBe("azpi");
       expect(result.agentInfo?.version).toBe("0.1.0");
     });
@@ -123,7 +128,7 @@ describe("PiAcpAgent", () => {
       const result = await agent.initialize({
         clientCapabilities: {},
         clientInfo: { name: "test-client", version: "1.0.0" },
-        protocolVersion: acp.PROTOCOL_VERSION,
+        protocolVersion: PROTOCOL_VERSION,
       });
       expect(result.agentCapabilities?.loadSession).toBe(true);
       expect(result.agentCapabilities?.promptCapabilities?.image).toBe(false);
@@ -150,7 +155,7 @@ describe("PiAcpAgent", () => {
           terminal: true,
         },
         clientInfo: { name: "test", version: "1.0" },
-        protocolVersion: acp.PROTOCOL_VERSION,
+        protocolVersion: PROTOCOL_VERSION,
       });
 
       const result = await agent.newSession(newSessionReq());
@@ -275,7 +280,7 @@ describe("PiAcpAgent", () => {
           sessionId: "test-session",
           modelId: "unknown/model",
         }),
-      ).rejects.toBeInstanceOf(acp.RequestError);
+      ).rejects.toBeInstanceOf(RequestError);
     });
 
     it("throws invalidParams for malformed modelId", async () => {
@@ -294,7 +299,7 @@ describe("PiAcpAgent", () => {
           sessionId: "test-session",
           modelId: "no-slash",
         }),
-      ).rejects.toBeInstanceOf(acp.RequestError);
+      ).rejects.toBeInstanceOf(RequestError);
     });
   });
 
@@ -387,7 +392,7 @@ describe("PiAcpAgent", () => {
           configId: "model",
           value: "no-slash",
         }),
-      ).rejects.toBeInstanceOf(acp.RequestError);
+      ).rejects.toBeInstanceOf(RequestError);
     });
 
     it("throws invalidParams for unknown configId", async () => {
@@ -407,7 +412,7 @@ describe("PiAcpAgent", () => {
           configId: "unknown-option",
           value: "whatever",
         }),
-      ).rejects.toBeInstanceOf(acp.RequestError);
+      ).rejects.toBeInstanceOf(RequestError);
     });
   });
 
@@ -455,7 +460,7 @@ describe("PiAcpAgent", () => {
       const result = await agent.initialize({
         clientCapabilities: {},
         clientInfo: { name: "test", version: "1.0" },
-        protocolVersion: acp.PROTOCOL_VERSION,
+        protocolVersion: PROTOCOL_VERSION,
       });
       expect(result.agentCapabilities?.promptCapabilities?.image).toBe(true);
       expect(result.agentCapabilities?.promptCapabilities?.embeddedContext).toBe(true);
@@ -474,7 +479,7 @@ describe("PiAcpAgent", () => {
       const result = await agent.initialize({
         clientCapabilities: {},
         clientInfo: { name: "test", version: "1.0" },
-        protocolVersion: acp.PROTOCOL_VERSION,
+        protocolVersion: PROTOCOL_VERSION,
       });
       expect(result.agentCapabilities?.promptCapabilities?.image).toBe(false);
       expect(result.agentCapabilities?.promptCapabilities?.embeddedContext).toBe(true);
@@ -518,7 +523,7 @@ describe("mapSessionEvent", () => {
   });
 });
 
-function promptReq(sessionId: string, text: string): acp.PromptRequest {
+function promptReq(sessionId: string, text: string): PromptRequest {
   return {
     sessionId,
     prompt: [{ text, type: "text" }],

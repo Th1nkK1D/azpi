@@ -1,12 +1,10 @@
-import type * as acp from "@agentclientprotocol/sdk";
+import type { ToolCall, ToolCallUpdate } from "@agentclientprotocol/sdk";
 import type { AgentEvent } from "@mariozechner/pi-agent-core";
 
 /**
  * Maps a Pi tool_execution_start event to an ACP ToolCall notification.
  */
-export function mapToolCallStart(
-  event: AgentEvent & { type: "tool_execution_start" },
-): acp.ToolCall {
+export function mapToolCallStart(event: AgentEvent & { type: "tool_execution_start" }): ToolCall {
   const argsStr = safeJsonStringify(event.args);
   return {
     content: [
@@ -26,7 +24,7 @@ export function mapToolCallStart(
  */
 export function mapToolCallUpdate(
   event: AgentEvent & { type: "tool_execution_update" },
-): acp.ToolCallUpdate {
+): ToolCallUpdate {
   const textContent = extractTextFromToolResult(event.partialResult);
   return {
     content: [
@@ -43,9 +41,7 @@ export function mapToolCallUpdate(
 /**
  * Maps a Pi tool_execution_end event to an ACP ToolCallUpdate notification.
  */
-export function mapToolCallEnd(
-  event: AgentEvent & { type: "tool_execution_end" },
-): acp.ToolCallUpdate {
+export function mapToolCallEnd(event: AgentEvent & { type: "tool_execution_end" }): ToolCallUpdate {
   const textContent = extractTextFromToolResult(event.result);
   return {
     content: [

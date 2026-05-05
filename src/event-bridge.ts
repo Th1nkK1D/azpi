@@ -1,4 +1,9 @@
-import type * as acp from "@agentclientprotocol/sdk";
+import type {
+  SessionConfigOption,
+  SessionNotification,
+  StopReason,
+  ContentBlock,
+} from "@agentclientprotocol/sdk";
 import type { AgentSessionEvent } from "@mariozechner/pi-coding-agent";
 import { mapToolCallEnd, mapToolCallStart, mapToolCallUpdate } from "./tool-call-mapper";
 
@@ -9,8 +14,8 @@ import { mapToolCallEnd, mapToolCallStart, mapToolCallUpdate } from "./tool-call
 export function mapSessionEvent(
   event: AgentSessionEvent,
   sessionId: string,
-  configOptions?: acp.SessionConfigOption[],
-): acp.SessionNotification | null {
+  configOptions?: SessionConfigOption[],
+): SessionNotification | null {
   switch (event.type) {
     case "message_update": {
       const assistantEvent = event.assistantMessageEvent;
@@ -142,7 +147,7 @@ function extractTextContent(message: any): string | null {
 /**
  * Maps a Pi agent_end event to an ACP StopReason.
  */
-export function mapStopReason(message: any): acp.StopReason {
+export function mapStopReason(message: any): StopReason {
   const stopReason = message?.stopReason as string | undefined;
   switch (stopReason) {
     case "max_tokens":
@@ -160,7 +165,7 @@ export function mapStopReason(message: any): acp.StopReason {
 /**
  * Maps the final message content from an agent_end event to ACP content blocks.
  */
-export function mapFinalContent(message: any): acp.ContentBlock[] {
+export function mapFinalContent(message: any): ContentBlock[] {
   const text = extractTextContent(message);
   if (!text) {
     return [];

@@ -1,5 +1,6 @@
 import { describe, expect, it, mock } from "bun:test";
-import * as acp from "@agentclientprotocol/sdk";
+import { PROTOCOL_VERSION } from "@agentclientprotocol/sdk";
+import type { AgentSideConnection } from "@agentclientprotocol/sdk";
 
 let capturedCreateAgentSessionOptions: any;
 
@@ -57,7 +58,7 @@ mock.module("@mariozechner/pi-coding-agent", () => ({
 
 const { PiAcpAgent } = await import("../src/pi-acp-agent");
 
-function createMockConnection(): acp.AgentSideConnection & {
+function createMockConnection(): AgentSideConnection & {
   sessionUpdate: ReturnType<typeof mock>;
   createTerminal: ReturnType<typeof mock>;
 } {
@@ -79,7 +80,7 @@ function createMockConnection(): acp.AgentSideConnection & {
     sessionUpdate,
     createTerminal,
     signal: new AbortController().signal,
-  } as unknown as acp.AgentSideConnection & {
+  } as unknown as AgentSideConnection & {
     sessionUpdate: ReturnType<typeof mock>;
     createTerminal: ReturnType<typeof mock>;
   };
@@ -102,7 +103,7 @@ describe("PiAcpAgent newSession without sessionFactory", () => {
         terminal: true,
       },
       clientInfo: { name: "test", version: "1.0" },
-      protocolVersion: acp.PROTOCOL_VERSION,
+      protocolVersion: PROTOCOL_VERSION,
     });
 
     const result = await agent.newSession({ cwd: "/test", mcpServers: [] });
