@@ -67,6 +67,10 @@ function createMockSession(overrides?: Partial<AgentSession>): AgentSession {
     setModel: mock(async () => {}),
     setThinkingLevel: mock(() => {}),
     setSessionName: mock(() => {}),
+    settingsManager: {
+      getTheme: mock(() => undefined),
+      setTheme: mock(() => {}),
+    },
     getSessionStats: mock(() => ({
       sessionFile: undefined,
       sessionId: "test-id",
@@ -300,8 +304,8 @@ describe("executeExport", () => {
     });
     const cmd = findBuiltinCommand("export")!;
     const result = await cmd.execute(session, "");
-    expect(result.text).toBe("Session exported to: /tmp/session.html");
-    expect(session.exportToHtml).toHaveBeenCalledWith(undefined);
+    expect(result.text).toBe("Session exported to /tmp/session.html");
+    expect(session.exportToHtml).toHaveBeenCalledWith("session.html");
   });
 
   it("exports to specified path", async () => {
@@ -310,7 +314,7 @@ describe("executeExport", () => {
     });
     const cmd = findBuiltinCommand("export")!;
     const result = await cmd.execute(session, "/custom/path.html");
-    expect(result.text).toBe("Session exported to: /custom/path.html");
+    expect(result.text).toBe("Session exported to /custom/path.html");
     expect(session.exportToHtml).toHaveBeenCalledWith("/custom/path.html");
   });
 });

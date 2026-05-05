@@ -252,12 +252,20 @@ async function executeCompact(session: AgentSession, args: string): Promise<Slas
 
 /**
  * Execute the `/export` command.
- * Exports the session to HTML.
+ * Exports the session to HTML. Default to session.html and dark theme.
  */
 async function executeExport(session: AgentSession, args: string): Promise<SlashCommandResult> {
-  const outputPath = args || undefined;
-  const filePath = await session.exportToHtml(outputPath);
-  return { text: `Session exported to: ${filePath}` };
+  const outputPath = args || "session.html";
+  const originalTheme = session.settingsManager.getTheme();
+  session.settingsManager.setTheme("dark");
+  try {
+    const filePath = await session.exportToHtml(outputPath);
+    return { text: `Session exported to ${filePath}` };
+  } finally {
+    if (originalTheme) {
+      session.settingsManager.setTheme(originalTheme);
+    }
+  }
 }
 
 /**
