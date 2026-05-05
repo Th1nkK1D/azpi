@@ -46,7 +46,7 @@ import { buildModelConfigOption, buildModelState, buildThinkingLevelConfigOption
 import { buildStartupMessage } from "./startup-message";
 import { name as AGENT_NAME, version as AGENT_VERSION } from "../package.json";
 import { findBuiltinCommand, parseSlashCommand, discoverCommands } from "./slash-commands";
-import { SessionResolver, replaySessionHistory } from "./session";
+import { SessionResolver, replaySessionHistory, deriveSessionName } from "./session";
 
 export interface PiAcpAgentOptions {
   /** Optional createAgentSession overrides (model, tools, etc.) */
@@ -244,6 +244,13 @@ export class PiAcpAgent implements Agent {
         });
 
         return { stopReason: "end_turn" };
+      }
+    }
+
+    if (!session.sessionName && !matchCommand) {
+      const name = deriveSessionName(text);
+      if (name) {
+        session.setSessionName(name);
       }
     }
 

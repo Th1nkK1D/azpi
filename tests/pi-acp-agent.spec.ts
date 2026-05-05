@@ -1,3 +1,4 @@
+/* eslint-disable no-underscore-dangle */
 import { describe, expect, it, mock } from "bun:test";
 import { PROTOCOL_VERSION, RequestError } from "@agentclientprotocol/sdk";
 import type {
@@ -70,6 +71,8 @@ function createMockSession(overrides?: Partial<AgentSession>): AgentSession {
     getAvailableThinkingLevels: () => ["off", "low", "medium", "high"],
     setModel: mock(async () => {}),
     setThinkingLevel: mock(() => {}),
+    setSessionName: mock(() => {}),
+    sessionName: undefined,
     subscribe: (cb: any) => {
       subscribers.push(cb);
       return () => {
@@ -430,7 +433,6 @@ describe("PiAcpAgent", () => {
       await agent.newSession(newSessionReq());
       conn.sessionUpdate.mockClear?.();
 
-      /* eslint-disable-next-line no-underscore-dangle */
       const subscribers = (mockSession as any)._subscribers as Array<(event: any) => void>;
       for (const subscriber of subscribers) {
         subscriber({ type: "thinking_level_changed", level: "high" });
@@ -582,7 +584,6 @@ describe("PiAcpAgent slash commands", () => {
 
     const newResult = await agent.newSession(newSessionReq());
 
-    /* eslint-disable-next-line no-underscore-dangle */
     const subscribers = (mockSession as any)._subscribers as Array<(event: any) => void>;
     setTimeout(() => {
       for (const sub of subscribers) {
@@ -606,7 +607,6 @@ describe("PiAcpAgent slash commands", () => {
 
     const newResult = await agent.newSession(newSessionReq());
 
-    /* eslint-disable-next-line no-underscore-dangle */
     const subscribers = (mockSession as any)._subscribers as Array<(event: any) => void>;
     setTimeout(() => {
       for (const sub of subscribers) {
@@ -616,6 +616,54 @@ describe("PiAcpAgent slash commands", () => {
 
     await agent.prompt(promptReq(newResult.sessionId, "/unknown arg"));
     expect(mockSession.prompt).toHaveBeenCalled();
+  });
+});
+
+describe("PiAcpAgent auto session naming", () => {
+  it("sets session name from first prompt when no existing name", async () => {
+    const models = [createMockModel()];
+    const mockSession = createMockSession({ model: models[0], sessionName: undefined });
+    const conn = createMockConnection();
+    const agent = new PiAcpAgent(conn, {
+      authStorage: createMockAuthStorage(),
+      modelRegistry: createMockRegistry(models) as any,
+      sessionFactory: async () => ({ session: mockSession }),
+    });
+
+    const newResult = await agent.newSession(newSessionReq());
+
+    const subscribers = (mockSession as any)._subscribers as Array<(event: any) => void>;
+    setTimeout(() => {
+      for (const sub of subscribers) {
+        sub({ type: "agent_end", messages: [{ stopReason: "end_turn" }] });
+      }
+    }, 5);
+
+    await agent.prompt(promptReq(newResult.sessionId, "Hello, how are you?"));
+    expect(mockSession.setSessionName).toHaveBeenCalledWith("Hello, how are you?");
+  });
+
+  it("does not override existing session name", async () => {
+    const models = [createMockModel()];
+    const mockSession = createMockSession({ model: models[0], sessionName: "Existing Name" });
+    const conn = createMockConnection();
+    const agent = new PiAcpAgent(conn, {
+      authStorage: createMockAuthStorage(),
+      modelRegistry: createMockRegistry(models) as any,
+      sessionFactory: async () => ({ session: mockSession }),
+    });
+
+    const newResult = await agent.newSession(newSessionReq());
+
+    const subscribers = (mockSession as any)._subscribers as Array<(event: any) => void>;
+    setTimeout(() => {
+      for (const sub of subscribers) {
+        sub({ type: "agent_end", messages: [{ stopReason: "end_turn" }] });
+      }
+    }, 5);
+
+    await agent.prompt(promptReq(newResult.sessionId, "Hello, how are you?"));
+    expect(mockSession.setSessionName).not.toHaveBeenCalled();
   });
 });
 
@@ -684,7 +732,6 @@ describe("PiAcpAgent agent_end emits session_info_update", () => {
     const newResult = await agent.newSession(newSessionReq());
     conn.sessionUpdate.mockClear?.();
 
-    /* eslint-disable-next-line no-underscore-dangle */
     const subscribers = (mockSession as any)._subscribers as Array<(event: any) => void>;
     setTimeout(() => {
       for (const sub of subscribers) {

@@ -1,5 +1,5 @@
 import { describe, expect, it, mock, beforeEach } from "bun:test";
-import { SessionResolver, replaySessionHistory } from "../src/session";
+import { SessionResolver, replaySessionHistory, deriveSessionName } from "../src/session";
 import { SessionManager } from "@mariozechner/pi-coding-agent";
 import type { AgentSession } from "@mariozechner/pi-coding-agent";
 import type { AgentSideConnection } from "@agentclientprotocol/sdk";
@@ -293,5 +293,81 @@ describe("replaySessionHistory", () => {
 
     await replaySessionHistory(session, "test-session", conn);
     expect(conn.sessionUpdate).not.toHaveBeenCalled();
+  });
+});
+
+describe("deriveSessionName", () => {
+  it("returns the trimmed first line of text", () => {
+    expect(deriveSessionName("Hello, how are you?")).toBe("Hello, how are you?");
+  });
+
+  it("truncates text longer than 50 characters", () => {
+    const longText = "a".repeat(100);
+    expect(deriveSessionName(longText)).toBe("a".repeat(50) + "...");
+  });
+
+  it("uses only the first line for session name", () => {
+    expect(deriveSessionName("First line\nSecond line")).toBe("First line");
+  });
+
+  it("returns undefined for slash commands", () => {
+    expect(deriveSessionName("/unknown arg")).toBeUndefined();
+  });
+
+  it("returns undefined for empty text", () => {
+    expect(deriveSessionName("")).toBeUndefined();
+  });
+
+  it("returns undefined for whitespace-only text", () => {
+    expect(deriveSessionName("   \n  ")).toBeUndefined();
+  });
+
+  it("trims leading and trailing whitespace from first line", () => {
+    expect(deriveSessionName("  Hello world  ")).toBe("Hello world");
+  });
+
+  it("returns undefined when first line after trimming starts with /", () => {
+    expect(deriveSessionName("/help me")).toBeUndefined();
+  });
+
+  it("returns text exactly at 50 char limit without ellipsis", () => {
+    const exact = "a".repeat(50);
+    expect(deriveSessionName(exact)).toBe(exact);
+  });
+
+  it("returns text at 51 chars with ellipsis", () => {
+    expect(deriveSessionName("a".repeat(51))).toBe("a".repeat(50) + "...");
+  });
+
+  it("strips markdown link to label only", () => {
+    expect(deriveSessionName("[Duck Duck Go](https://duckduckgo.com)")).toBe("Duck Duck Go");
+  });
+
+  it("strips markdown link in mixed text", () => {
+    expect(deriveSessionName("Check out [Duck Duck Go](https://duckduckgo.com) it's great")).toBe(
+      "Check out Duck Duck Go it's great",
+    );
+  });
+
+  it("strips multiple markdown links", () => {
+    expect(deriveSessionName("[A](url1) and [B](url2) here")).toBe("A and B here");
+  });
+
+  it("falls back to URL when markdown link has empty label", () => {
+    expect(deriveSessionName("[](https://example.com)")).toBe("https://example.com");
+  });
+
+  it("truncates label after stripping markdown link", () => {
+    const longLabel = "a".repeat(60);
+    const input = `[${longLabel}](https://example.com)`;
+    expect(deriveSessionName(input)).toBe("a".repeat(50) + "...");
+  });
+
+  it("handles plain text with no markdown links unchanged", () => {
+    expect(deriveSessionName("Just plain text")).toBe("Just plain text");
+  });
+
+  it("strips link even when text starts with non-link content before trimming", () => {
+    expect(deriveSessionName("  [Label](url)  ")).toBe("Label");
   });
 });

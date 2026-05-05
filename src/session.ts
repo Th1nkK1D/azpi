@@ -2,10 +2,12 @@ import { SessionManager } from "@mariozechner/pi-coding-agent";
 import type { AgentSession } from "@mariozechner/pi-coding-agent";
 import type { AgentSideConnection } from "@agentclientprotocol/sdk";
 
+const MAX_SESSION_NAME_LENGTH = 50;
+
 /**
  * Resolves a Pi session UUID to its JSONL file path.
  * Uses an in-memory cache first, then falls back to SessionManager.list()
- * and SessionManager.listAll() for cross-cwd lookups.
+ * and SessionManager.listAll() for cross-cwd lookup.
  */
 export class SessionResolver {
   private cache = new Map<string, string>();
@@ -113,4 +115,25 @@ function extractTextContent(message: any): string | undefined {
   }
 
   return undefined;
+}
+
+/**
+ * Derives a session name from the first line of a prompt text.
+ * Returns undefined if the line is empty or starts with "/".
+ */
+export function deriveSessionName(text: string): string | undefined {
+  const cleanText = text
+    .trim()
+    .split("\n")[0]
+    // Strip resource markdown links: [label](url) -> label, or [](url) -> url
+    ?.replace(/\[([^\]]*)\]\(([^)]+)\)/g, (_, label, url) => label || url)
+    .trim();
+
+  if (!cleanText || cleanText.startsWith("/")) {
+    return undefined;
+  }
+  if (cleanText.length <= MAX_SESSION_NAME_LENGTH) {
+    return cleanText;
+  }
+  return cleanText.slice(0, MAX_SESSION_NAME_LENGTH).trimEnd() + "...";
 }
