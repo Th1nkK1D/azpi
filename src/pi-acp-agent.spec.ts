@@ -39,6 +39,8 @@ function createMockModel(overrides?: Partial<Model<any>>): Model<any> {
 
 function createMockSession(overrides?: Partial<AgentSession>): AgentSession {
   const subscribers: Array<(event: any) => void> = [];
+  const mockSessionId = overrides?.sessionId || `mock-session-${crypto.randomUUID()}`;
+  const mockSessionFile = overrides?.sessionFile || `/tmp/sessions/${mockSessionId}.jsonl`;
 
   const mockResourceLoader = {
     getAgentsFiles: () => ({ agentsFiles: [] }),
@@ -52,7 +54,14 @@ function createMockSession(overrides?: Partial<AgentSession>): AgentSession {
     reload: mock(async () => {}),
   };
 
+  const mockSessionManager = {
+    getEntries: () => [],
+    getBranch: () => [],
+  };
+
   return {
+    sessionId: mockSessionId,
+    sessionFile: mockSessionFile,
     model: createMockModel(),
     thinkingLevel: "medium",
     getAvailableThinkingLevels: () => ["off", "low", "medium", "high"],
@@ -69,6 +78,7 @@ function createMockSession(overrides?: Partial<AgentSession>): AgentSession {
     abort: mock(async () => {}),
     dispose: mock(() => {}),
     resourceLoader: mockResourceLoader,
+    sessionManager: mockSessionManager,
     _subscribers: subscribers,
     ...overrides,
   } as unknown as AgentSession;
@@ -117,10 +127,12 @@ describe("PiAcpAgent", () => {
         clientInfo: { name: "test-client", version: "1.0.0" },
         protocolVersion: acp.PROTOCOL_VERSION,
       });
-      expect(result.agentCapabilities?.loadSession).toBe(false);
+      expect(result.agentCapabilities?.loadSession).toBe(true);
       expect(result.agentCapabilities?.promptCapabilities?.image).toBe(false);
       expect(result.agentCapabilities?.promptCapabilities?.embeddedContext).toBe(true);
       expect(result.agentCapabilities?.sessionCapabilities?.close).toBeTruthy();
+      expect(result.agentCapabilities?.sessionCapabilities?.list).toBeTruthy();
+      expect(result.agentCapabilities?.sessionCapabilities?.resume).toBeTruthy();
     });
   });
 
@@ -601,5 +613,92 @@ describe("PiAcpAgent slash commands", () => {
 
     await agent.prompt(promptReq(newResult.sessionId, "/unknown arg"));
     expect(mockSession.prompt).toHaveBeenCalled();
+  });
+});
+
+describe("PiAcpAgent loadSession", () => {
+  it("creates a new session when session is not found", async () => {
+    const models = [createMockModel()];
+    const mockSession = createMockSession({ model: models[0] });
+    const conn = createMockConnection();
+    const agent = new PiAcpAgent(conn, {
+      authStorage: createMockAuthStorage(),
+      modelRegistry: createMockRegistry(models) as any,
+      sessionFactory: async () => ({ session: mockSession }),
+    });
+
+    const result = await agent.loadSession({
+      sessionId: "nonexistent",
+      cwd: "/test",
+      mcpServers: [],
+    });
+    expect(result.configOptions).toBeDefined();
+  });
+});
+
+describe("PiAcpAgent resumeSession", () => {
+  it("creates a new session when session is not found", async () => {
+    const models = [createMockModel()];
+    const mockSession = createMockSession({ model: models[0] });
+    const conn = createMockConnection();
+    const agent = new PiAcpAgent(conn, {
+      authStorage: createMockAuthStorage(),
+      modelRegistry: createMockRegistry(models) as any,
+      sessionFactory: async () => ({ session: mockSession }),
+    });
+
+    const result = await agent.unstable_resumeSession({ sessionId: "nonexistent" });
+    expect(result).toEqual({});
+  });
+});
+
+describe("PiAcpAgent unstable_listSessions", () => {
+  it("returns empty sessions list when no sessions exist", async () => {
+    const models = [createMockModel()];
+    const conn = createMockConnection();
+    const agent = new PiAcpAgent(conn, {
+      authStorage: createMockAuthStorage(),
+      modelRegistry: createMockRegistry(models) as any,
+    });
+
+    const result = await agent.unstable_listSessions({});
+    expect(result.sessions).toBeDefined();
+    expect(Array.isArray(result.sessions)).toBe(true);
+  });
+});
+
+describe("PiAcpAgent agent_end emits session_info_update", () => {
+  it("emits session_info_update with updatedAt when agent_end fires", async () => {
+    const models = [createMockModel()];
+    const mockSession = createMockSession({ model: models[0] });
+    const conn = createMockConnection();
+    const agent = new PiAcpAgent(conn, {
+      authStorage: createMockAuthStorage(),
+      modelRegistry: createMockRegistry(models) as any,
+      sessionFactory: async () => ({ session: mockSession }),
+    });
+
+    const newResult = await agent.newSession(newSessionReq());
+    conn.sessionUpdate.mockClear?.();
+
+    /* eslint-disable-next-line no-underscore-dangle */
+    const subscribers = (mockSession as any)._subscribers as Array<(event: any) => void>;
+    setTimeout(() => {
+      for (const sub of subscribers) {
+        sub({ type: "agent_end", messages: [{ stopReason: "end_turn" }] });
+      }
+    }, 5);
+
+    const promptPromise = agent.prompt(promptReq(newResult.sessionId, "test"));
+    await promptPromise;
+
+    await new Promise((r) => setTimeout(r, 10));
+
+    const calls = conn.sessionUpdate.mock.calls as any[];
+    const infoUpdateCalls = calls.filter(
+      (call) => call[0].update.sessionUpdate === "session_info_update",
+    );
+    expect(infoUpdateCalls.length).toBeGreaterThanOrEqual(1);
+    expect(infoUpdateCalls[0][0].update.updatedAt).toBeDefined();
   });
 });

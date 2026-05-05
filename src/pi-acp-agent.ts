@@ -18,6 +18,7 @@ import { buildModelConfigOption, buildModelState, buildThinkingLevelConfigOption
 import { buildStartupMessage } from "./startup-message";
 import { name as AGENT_NAME, version as AGENT_VERSION } from "../package.json";
 import { findBuiltinCommand, parseSlashCommand, discoverCommands } from "./slash-commands";
+import { SessionResolver, replaySessionHistory } from "./session";
 
 export interface PiAcpAgentOptions {
   /** Optional createAgentSession overrides (model, tools, etc.) */
@@ -39,6 +40,7 @@ export class PiAcpAgent implements acp.Agent {
   private unsubscribers = new Map<string, () => void>();
   private pendingPrompts = new Map<string, { resolve: (r: acp.PromptResponse) => void }>();
   private abortControllers = new Map<string, AbortController>();
+  private sessionResolver = new SessionResolver();
 
   readonly options: PiAcpAgentOptions;
   readonly connection: acp.AgentSideConnection;
@@ -63,8 +65,7 @@ export class PiAcpAgent implements acp.Agent {
 
     const response: acp.InitializeResponse = {
       agentCapabilities: {
-        // MVP: no session load/resume, no auth
-        loadSession: false,
+        loadSession: true,
         promptCapabilities: {
           audio: false,
           image: anyModelSupportsImage,
@@ -72,6 +73,8 @@ export class PiAcpAgent implements acp.Agent {
         },
         sessionCapabilities: {
           close: {},
+          list: {},
+          resume: {},
         },
       },
       agentInfo: {
@@ -108,11 +111,10 @@ export class PiAcpAgent implements acp.Agent {
 
   async newSession(params: acp.NewSessionRequest): Promise<acp.NewSessionResponse> {
     const cwd = params.cwd ?? process.cwd();
-    const sessionId = crypto.randomUUID();
 
     const proxyTools = createAcpProxyTools({
       connection: this.connection,
-      sessionId,
+      sessionId: "__placeholder__",
       capabilities: this.clientCapabilities,
       cwd,
     });
@@ -121,7 +123,7 @@ export class PiAcpAgent implements acp.Agent {
       ? await this.options.sessionFactory(cwd)
       : await createAgentSession({
           cwd,
-          sessionManager: SessionManager.inMemory(),
+          sessionManager: SessionManager.create(cwd),
           // Custom tools with the same name override built-ins;
           // the allowlist keeps all 4 tool slots regardless of which we override.
           tools: ["read", "bash", "edit", "write"],
@@ -131,11 +133,17 @@ export class PiAcpAgent implements acp.Agent {
           ...this.options.sessionOptions,
         });
 
+    const sessionId = session.sessionId;
+
     if (!session.model && this.availableModels.length > 0) {
       await session.setModel(this.availableModels[0]!);
     }
 
     this.sessions.set(sessionId, session);
+
+    if (session.sessionFile) {
+      this.sessionResolver.registerSession(sessionId, session.sessionFile);
+    }
 
     const unsubscribe = session.subscribe((event: AgentSessionEvent) => {
       this.onEvent(sessionId, event);
@@ -239,6 +247,119 @@ export class PiAcpAgent implements acp.Agent {
     await this.cleanupSession(params.sessionId);
   }
 
+  async loadSession(params: acp.LoadSessionRequest): Promise<acp.LoadSessionResponse> {
+    const cwd = params.cwd ?? process.cwd();
+    const { sessionId } = params;
+
+    const sessionPath = await this.sessionResolver.resolveSessionPath(cwd, sessionId);
+    const isNewSession = !sessionPath;
+
+    const proxyTools = createAcpProxyTools({
+      connection: this.connection,
+      sessionId,
+      capabilities: this.clientCapabilities,
+      cwd,
+    });
+
+    const { session } = await createAgentSession({
+      cwd,
+      sessionManager: isNewSession ? SessionManager.create(cwd) : SessionManager.open(sessionPath!),
+      tools: ["read", "bash", "edit", "write"],
+      customTools: proxyTools,
+      authStorage: this.authStorage,
+      modelRegistry: this.modelRegistry,
+      ...this.options.sessionOptions,
+    });
+
+    if (session.sessionFile) {
+      this.sessionResolver.registerSession(sessionId, session.sessionFile);
+    }
+
+    this.sessions.set(sessionId, session);
+
+    const unsubscribe = session.subscribe((event: AgentSessionEvent) => {
+      this.onEvent(sessionId, event);
+    });
+    this.unsubscribers.set(sessionId, unsubscribe);
+
+    if (!isNewSession) {
+      await replaySessionHistory(session, sessionId, this.connection);
+    }
+
+    const response: acp.LoadSessionResponse = {};
+    if (session.model) {
+      response.models = buildModelState(this.availableModels, session.model);
+    }
+    response.configOptions = this.buildConfigOptions(session);
+
+    this.discoverAndEmitCommands(sessionId).catch(() => {
+      // Connection may be closing; ignore
+    });
+
+    return response;
+  }
+
+  async unstable_resumeSession(
+    params: acp.ResumeSessionRequest,
+  ): Promise<acp.ResumeSessionResponse> {
+    const cwd = process.cwd();
+    const { sessionId } = params;
+
+    const sessionPath = await this.sessionResolver.resolveSessionPath(cwd, sessionId);
+    const isNewSession = !sessionPath;
+
+    const proxyTools = createAcpProxyTools({
+      connection: this.connection,
+      sessionId,
+      capabilities: this.clientCapabilities,
+      cwd,
+    });
+
+    const { session } = await createAgentSession({
+      cwd,
+      sessionManager: isNewSession ? SessionManager.create(cwd) : SessionManager.open(sessionPath!),
+      tools: ["read", "bash", "edit", "write"],
+      customTools: proxyTools,
+      authStorage: this.authStorage,
+      modelRegistry: this.modelRegistry,
+      ...this.options.sessionOptions,
+    });
+
+    if (session.sessionFile) {
+      this.sessionResolver.registerSession(sessionId, session.sessionFile);
+    }
+
+    this.sessions.set(sessionId, session);
+
+    const unsubscribe = session.subscribe((event: AgentSessionEvent) => {
+      this.onEvent(sessionId, event);
+    });
+    this.unsubscribers.set(sessionId, unsubscribe);
+
+    // Return without replaying history
+    return {};
+  }
+
+  async unstable_listSessions(params: acp.ListSessionsRequest): Promise<acp.ListSessionsResponse> {
+    const cwd = params.cwd ?? process.cwd();
+
+    await this.sessionResolver.warmCache(cwd);
+
+    const piSessions = await SessionManager.list(cwd);
+
+    const sessions: acp.SessionInfo[] = piSessions.map((info) => ({
+      sessionId: info.id,
+      cwd: info.cwd,
+      title: info.name || undefined,
+      updatedAt: info.modified.toISOString(),
+      _meta: {
+        messageCount: info.messageCount,
+      },
+    }));
+
+    return { sessions };
+  }
+
   async authenticate(_params: acp.AuthenticateRequest): Promise<void> {
     // No auth in MVP
   }
@@ -320,6 +441,16 @@ export class PiAcpAgent implements acp.Agent {
         this.pendingPrompts.delete(sessionId);
         pending.resolve({ stopReason });
       }
+
+      this.connection
+        .sessionUpdate({
+          sessionId,
+          update: {
+            sessionUpdate: "session_info_update",
+            updatedAt: new Date().toISOString(),
+          },
+        })
+        .catch(() => {});
     }
   }
 
@@ -367,6 +498,8 @@ export class PiAcpAgent implements acp.Agent {
       session.dispose();
       this.sessions.delete(sessionId);
     }
+
+    this.sessionResolver.unregisterSession(sessionId);
 
     const pending = this.pendingPrompts.get(sessionId);
     if (pending) {
