@@ -252,7 +252,7 @@ export class PiAcpAgent implements Agent {
         await this.connection.sessionUpdate({
           sessionId,
           update: {
-            content: { text: result.text, type: "text" },
+            content: { text: result, type: "text" },
             sessionUpdate: "agent_message_chunk",
           },
         });

@@ -185,21 +185,21 @@ describe("executeName", () => {
     const session = createMockSession({ sessionName: "my-project" });
     const cmd = findBuiltinCommand("name")!;
     const result = await cmd.execute(session, "");
-    expect(result.text).toBe('Session name is: "my-project"');
+    expect(result).toBe('Session name is: "my-project"');
   });
 
   it("shows usage hint when no name and no current name", async () => {
     const session = createMockSession({ sessionName: undefined });
     const cmd = findBuiltinCommand("name")!;
     const result = await cmd.execute(session, "");
-    expect(result.text).toContain("Session has no name");
+    expect(result).toContain("Session has no name");
   });
 
   it("sets new name when args provided", async () => {
     const session = createMockSession();
     const cmd = findBuiltinCommand("name")!;
     const result = await cmd.execute(session, "new-name");
-    expect(result.text).toBe('Session name set to: "new-name"');
+    expect(result).toBe('Session name set to: "new-name"');
     expect(session.setSessionName).toHaveBeenCalledWith("new-name");
   });
 });
@@ -223,11 +223,11 @@ describe("executeSession", () => {
     });
     const cmd = findBuiltinCommand("session")!;
     const result = await cmd.execute(session, "");
-    expect(result.text).toContain("abc-123");
-    expect(result.text).toContain("test-session");
-    expect(result.text).toContain("5 user");
-    expect(result.text).toContain("12 tool calls");
-    expect(result.text).toContain("$0.0125");
+    expect(result).toContain("abc-123");
+    expect(result).toContain("test-session");
+    expect(result).toContain("5 user");
+    expect(result).toContain("12 tool calls");
+    expect(result).toContain("$0.0125");
   });
 
   it("handles missing contextUsage", async () => {
@@ -247,8 +247,8 @@ describe("executeSession", () => {
     });
     const cmd = findBuiltinCommand("session")!;
     const result = await cmd.execute(session, "");
-    expect(result.text).toContain("abc-123");
-    expect(result.text).not.toContain("Context:");
+    expect(result).toContain("abc-123");
+    expect(result).not.toContain("Context:");
   });
 });
 
@@ -263,7 +263,7 @@ describe("executeCompact", () => {
     });
     const cmd = findBuiltinCommand("compact")!;
     const result = await cmd.execute(session, "please summarize");
-    expect(result.text).toContain("Compaction completed.");
+    expect(result).toContain("Compaction completed.");
     expect(session.abort).toHaveBeenCalled();
     expect(session.compact).toHaveBeenCalledWith("please summarize");
   });
@@ -304,7 +304,7 @@ describe("executeExport", () => {
     });
     const cmd = findBuiltinCommand("export")!;
     const result = await cmd.execute(session, "");
-    expect(result.text).toBe("Session exported to /tmp/session.html");
+    expect(result).toBe("Session exported to /tmp/session.html");
     expect(session.exportToHtml).toHaveBeenCalledWith("session.html");
   });
 
@@ -314,7 +314,7 @@ describe("executeExport", () => {
     });
     const cmd = findBuiltinCommand("export")!;
     const result = await cmd.execute(session, "/custom/path.html");
-    expect(result.text).toBe("Session exported to /custom/path.html");
+    expect(result).toBe("Session exported to /custom/path.html");
     expect(session.exportToHtml).toHaveBeenCalledWith("/custom/path.html");
   });
 });
@@ -326,7 +326,7 @@ describe("executeReload", () => {
     });
     const cmd = findBuiltinCommand("reload")!;
     const result = await cmd.execute(session, "");
-    expect(result.text).toContain("reloaded");
+    expect(result).toContain("reloaded");
     expect(session.reload).toHaveBeenCalled();
   });
 });

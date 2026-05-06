@@ -1,36 +1,18 @@
 import type { AgentSession } from "@mariozechner/pi-coding-agent";
 import type { AvailableCommand } from "@agentclientprotocol/sdk";
 
-/**
- * Parsed slash command result.
- */
+const HINT_PLACEHOLDER = "Arguments for the command";
+
 interface SlashCommandMatch {
-  /** Command name without leading slash (e.g. "name", "compact") */
   name: string;
-  /** Arguments string after the command name (trimmed) */
   args: string;
 }
 
-/**
- * Result from executing a slash command.
- */
-interface SlashCommandResult {
-  /** Text output to show to the user */
-  text: string;
-}
-
-/**
- * Built-in slash command handler.
- */
 interface BuiltinCommand {
-  /** Command name without leading slash */
   name: string;
-  /** Human-readable description for ACP AvailableCommand */
   description: string;
-  /** Whether the command accepts arguments */
-  acceptsArgs: boolean;
-  /** Execute the command against a session */
-  execute(session: AgentSession, args: string): Promise<SlashCommandResult>;
+  argsHint?: string;
+  execute(session: AgentSession, args: string): Promise<string>;
 }
 
 /**
@@ -46,7 +28,7 @@ export function discoverCommands(session: AgentSession): AvailableCommand[] {
     commands.push({
       name: cmd.name,
       description: cmd.description,
-      ...(cmd.acceptsArgs ? { input: { hint: "Arguments for the command" } } : {}),
+      ...(cmd.argsHint ? { input: { hint: cmd.argsHint } } : {}),
     });
   }
 
@@ -60,7 +42,7 @@ export function discoverCommands(session: AgentSession): AvailableCommand[] {
           commands.push({
             name: `skill:${skill.name}`,
             description: skill.description || `Skill: ${skill.name}`,
-            input: { hint: "Arguments for the command" },
+            input: { hint: HINT_PLACEHOLDER },
           });
         }
       }
@@ -78,7 +60,7 @@ export function discoverCommands(session: AgentSession): AvailableCommand[] {
           commands.push({
             name: `:${template.name}`,
             description: template.description || `Prompt template: ${template.name}`,
-            input: { hint: "Arguments for the command" },
+            input: { hint: HINT_PLACEHOLDER },
           });
         }
       }
@@ -122,31 +104,29 @@ export const builtinCommands: ReadonlyArray<BuiltinCommand> = [
   {
     name: "name",
     description: "Set the session display name",
-    acceptsArgs: true,
+    argsHint: "New session name (or empty to show current name)",
     execute: executeName,
   },
   {
     name: "session",
     description: "Show session information (file, ID, messages, tokens, cost)",
-    acceptsArgs: false,
     execute: executeSession,
   },
   {
     name: "compact",
     description: "Manually compact the session context",
-    acceptsArgs: true,
+    argsHint: "Optional custom compaction instructions",
     execute: executeCompact,
   },
   {
     name: "export",
     description: "Export session to HTML file",
-    acceptsArgs: true,
+    argsHint: "Output file path (default: session.html)",
     execute: executeExport,
   },
   {
     name: "reload",
     description: "Reload extensions, skills, prompts, and context files",
-    acceptsArgs: false,
     execute: executeReload,
   },
 ];
@@ -162,25 +142,23 @@ export function findBuiltinCommand(name: string): BuiltinCommand | undefined {
  * Execute the `/name` command.
  * Sets the session display name.
  */
-async function executeName(session: AgentSession, args: string): Promise<SlashCommandResult> {
+async function executeName(session: AgentSession, args: string): Promise<string> {
   if (!args) {
     const currentName = session.sessionName;
-    return {
-      text: currentName
-        ? `Session name is: "${currentName}"`
-        : "Session has no name. Usage: /name <name>",
-    };
+    return currentName
+      ? `Session name is: "${currentName}"`
+      : "Session has no name. Usage: /name <name>";
   }
 
   session.setSessionName(args);
-  return { text: `Session name set to: "${args}"` };
+  return `Session name set to: "${args}"`;
 }
 
 /**
  * Execute the `/session` command.
  * Shows session statistics.
  */
-async function executeSession(session: AgentSession): Promise<SlashCommandResult> {
+async function executeSession(session: AgentSession): Promise<string> {
   const stats = session.getSessionStats();
   const lines: string[] = [];
 
@@ -204,14 +182,14 @@ async function executeSession(session: AgentSession): Promise<SlashCommandResult
   );
   lines.push(`- Cost Estimation: $${stats.cost.toFixed(4)}`);
 
-  return { text: lines.join("\n") };
+  return lines.join("\n");
 }
 
 /**
  * Execute the `/compact` command.
  * Triggers context compaction with optional custom instructions.
  */
-async function executeCompact(session: AgentSession, args: string): Promise<SlashCommandResult> {
+async function executeCompact(session: AgentSession, args: string): Promise<string> {
   try {
     await session.abort();
   } catch {
@@ -230,20 +208,20 @@ async function executeCompact(session: AgentSession, args: string): Promise<Slas
     }
   }
 
-  return { text: lines.join("\n") };
+  return lines.join("\n");
 }
 
 /**
  * Execute the `/export` command.
  * Exports the session to HTML. Default to session.html and dark theme.
  */
-async function executeExport(session: AgentSession, args: string): Promise<SlashCommandResult> {
+async function executeExport(session: AgentSession, args: string): Promise<string> {
   const outputPath = args || "session.html";
   const originalTheme = session.settingsManager.getTheme();
   session.settingsManager.setTheme("dark");
   try {
     const filePath = await session.exportToHtml(outputPath);
-    return { text: `Session exported to ${filePath}` };
+    return `Session exported to ${filePath}`;
   } finally {
     if (originalTheme) {
       session.settingsManager.setTheme(originalTheme);
@@ -255,7 +233,7 @@ async function executeExport(session: AgentSession, args: string): Promise<Slash
  * Execute the `/reload` command.
  * Reloads extensions, skills, prompts, and context files.
  */
-async function executeReload(session: AgentSession): Promise<SlashCommandResult> {
+async function executeReload(session: AgentSession): Promise<string> {
   await session.reload();
-  return { text: "Extensions, skills, prompts, and context files reloaded." };
+  return "Extensions, skills, prompts, and context files reloaded.";
 }
