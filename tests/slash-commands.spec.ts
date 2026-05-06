@@ -335,12 +335,12 @@ describe("discoverCommands", () => {
   it("returns built-in commands", () => {
     const session = createMockSession();
     const commands = discoverCommands(session);
-    const builtinNames = commands.filter((c) => c.source === "builtin").map((c) => c.name);
-    expect(builtinNames).toContain("name");
-    expect(builtinNames).toContain("session");
-    expect(builtinNames).toContain("compact");
-    expect(builtinNames).toContain("export");
-    expect(builtinNames).toContain("reload");
+    const names = commands.map((c) => c.name);
+    expect(names).toContain("name");
+    expect(names).toContain("session");
+    expect(names).toContain("compact");
+    expect(names).toContain("export");
+    expect(names).toContain("reload");
   });
 
   it("discovers skills from resource loader", () => {
@@ -354,7 +354,7 @@ describe("discoverCommands", () => {
     });
     const session = createMockSession({ resourceLoader: rl });
     const commands = discoverCommands(session);
-    const skillCmds = commands.filter((c) => c.source === "skill");
+    const skillCmds = commands.filter((c) => c.name.startsWith("skill:"));
     expect(skillCmds.length).toBe(2);
     expect(skillCmds[1]!.name).toBe("skill:test-skill");
     expect(skillCmds[0]!.description).toBe("Skill: another-skill");
@@ -371,7 +371,7 @@ describe("discoverCommands", () => {
     });
     const session = createMockSession({ resourceLoader: rl });
     const commands = discoverCommands(session);
-    const promptCmds = commands.filter((c) => c.source === "prompt");
+    const promptCmds = commands.filter((c) => c.name.startsWith(":"));
     expect(promptCmds.length).toBe(2);
     expect(promptCmds[0]!.name).toBe(":explain");
     expect(promptCmds[1]!.name).toBe(":review");

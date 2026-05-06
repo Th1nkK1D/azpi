@@ -1,11 +1,13 @@
 import { describe, expect, it, mock } from "bun:test";
-import type { AgentSession } from "@mariozechner/pi-coding-agent";
+import { RequestError } from "@agentclientprotocol/sdk";
+import type { AgentSession, ModelRegistry } from "@mariozechner/pi-coding-agent";
 import type { Model } from "@mariozechner/pi-ai";
 import {
   buildModelConfigOption,
   buildModelState,
   buildThinkingLevelConfigOption,
-} from "../src/config";
+  resolveModelById,
+} from "../src/model";
 
 function createMockModel(overrides?: Partial<Model<any>>): Model<any> {
   return {
@@ -114,5 +116,48 @@ describe("buildThinkingLevelConfigOption", () => {
     });
     const option = buildThinkingLevelConfigOption(session);
     expect(option.options![0]).toEqual({ value: "high", name: "High" });
+  });
+});
+
+describe("resolveModelById", () => {
+  function createMockRegistry(models: Model<any>[]): ModelRegistry {
+    return {
+      find: (provider: string, id: string) =>
+        models.find((m) => m.provider === provider && m.id === id),
+      getAvailable: () => models,
+    } as unknown as ModelRegistry;
+  }
+
+  it("resolves a valid provider/model string", () => {
+    const models = [
+      createMockModel({ provider: "openai", id: "gpt-4", name: "GPT-4" }),
+      createMockModel({ provider: "anthropic", id: "claude-3", name: "Claude 3" }),
+    ];
+    const registry = createMockRegistry(models);
+    const result = resolveModelById(registry, "anthropic/claude-3");
+    expect(result.provider).toBe("anthropic");
+    expect(result.id).toBe("claude-3");
+  });
+
+  it("throws RequestError for malformed modelId (no slash)", () => {
+    const registry = createMockRegistry([]);
+    expect(() => resolveModelById(registry, "bogus")).toThrow(RequestError);
+    try {
+      resolveModelById(registry, "bogus");
+    } catch (e) {
+      expect((e as RequestError).message).toBe("Invalid params");
+    }
+  });
+
+  it("throws RequestError for unknown model", () => {
+    const models = [createMockModel({ provider: "openai", id: "gpt-4" })];
+    const registry = createMockRegistry(models);
+    expect(() => resolveModelById(registry, "openai/unknown")).toThrow(RequestError);
+  });
+
+  it("throws RequestError for empty parts after split", () => {
+    const registry = createMockRegistry([]);
+    expect(() => resolveModelById(registry, "/only-slash")).toThrow(RequestError);
+    expect(() => resolveModelById(registry, "only-slash/")).toThrow(RequestError);
   });
 });

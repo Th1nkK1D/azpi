@@ -1,6 +1,7 @@
+import { RequestError } from "@agentclientprotocol/sdk";
 import type { SessionModelState, SessionConfigOption } from "@agentclientprotocol/sdk";
 import type { Model } from "@mariozechner/pi-ai";
-import type { AgentSession } from "@mariozechner/pi-coding-agent";
+import type { AgentSession, ModelRegistry } from "@mariozechner/pi-coding-agent";
 
 type SessionConfigWithOptions = SessionConfigOption & {
   options: { value: string; name: string }[];
@@ -49,4 +50,20 @@ export function buildThinkingLevelConfigOption(session: AgentSession): SessionCo
       name: level.charAt(0).toUpperCase() + level.slice(1),
     })),
   };
+}
+
+/**
+ * Resolves a "provider/model" string to a Model object via the registry.
+ * Throws RequestError if the format is invalid or the model is unknown.
+ */
+export function resolveModelById(registry: ModelRegistry, modelId: string): Model<any> {
+  const [provider, id] = modelId.split("/", 2);
+  if (!provider || !id) {
+    throw RequestError.invalidParams(`Invalid modelId: ${modelId}`);
+  }
+  const model = registry.find(provider, id);
+  if (!model) {
+    throw RequestError.invalidParams(`Unknown model: ${modelId}`);
+  }
+  return model;
 }

@@ -5,6 +5,8 @@ import { defineTool } from "@mariozechner/pi-coding-agent";
 import { Type } from "typebox";
 import { resolve as _resolve } from "path";
 
+const BASH_POLL_INTERVAL = 250;
+
 const readParams = Type.Object({
   path: Type.String({ description: "File path to read" }),
   offset: Type.Optional(Type.Number({ description: "Line number to start from (1-based)" })),
@@ -51,9 +53,13 @@ export interface AcpProxyToolOptions {
  * advertised capabilities for. Returns an empty array when no capabilities
  * are advertised (all native tools remain active).
  */
-export function createAcpProxyTools(options: AcpProxyToolOptions): ToolDefinition[] {
+export function createAcpProxyTools({
+  connection,
+  sessionId,
+  capabilities,
+  cwd,
+}: AcpProxyToolOptions): ToolDefinition[] {
   const tools: ToolDefinition[] = [];
-  const { connection, sessionId, capabilities, cwd } = options;
 
   if (!capabilities) {
     return tools;
@@ -111,10 +117,9 @@ function createReadProxy(
     label: "Read File",
     description: "Read the contents of a text file at the given path. Lines are 1-indexed.",
     parameters: readParams,
-    execute: async (toolCallId, params) => {
+    execute: async (_toolCallId, params) => {
       const absolutePath = resolvePath(cwd, params.path);
 
-      // Read full file via ACP; we apply offset/limit locally for Pi-consistent semantics
       const response = await connection.readTextFile({
         sessionId,
         path: absolutePath,
@@ -230,7 +235,6 @@ function createBashProxy(
       });
 
       try {
-        const pollInterval = 250;
         let accumulated = "";
         const startTime = Date.now();
 
@@ -285,7 +289,7 @@ ${finalOutput.output}`,
             };
           }
 
-          await sleep(pollInterval, signal);
+          await sleep(BASH_POLL_INTERVAL, signal);
         }
       } catch (err) {
         try {

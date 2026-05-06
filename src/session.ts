@@ -1,6 +1,7 @@
 import { SessionManager } from "@mariozechner/pi-coding-agent";
 import type { AgentSession } from "@mariozechner/pi-coding-agent";
 import type { AgentSideConnection } from "@agentclientprotocol/sdk";
+import { extractTextContent } from "./event-bridge";
 
 /**
  * Resolves a Pi session UUID to its JSONL file path.
@@ -99,18 +100,4 @@ export async function replaySessionHistory(
   }
 
   await Promise.all(updates);
-}
-
-function extractTextContent(message: any): string | undefined {
-  if (typeof message.content === "string") return message.content;
-
-  if (Array.isArray(message.content)) {
-    const parts = message.content
-      .filter((part: any) => part.type === "text")
-      .map((part: any) => part.text)
-      .join("");
-    return parts || undefined;
-  }
-
-  return undefined;
 }

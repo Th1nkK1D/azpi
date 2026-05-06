@@ -1,4 +1,5 @@
 import type { AgentSession } from "@mariozechner/pi-coding-agent";
+import type { AvailableCommand } from "@agentclientprotocol/sdk";
 
 /**
  * Parsed slash command result.
@@ -33,34 +34,19 @@ interface BuiltinCommand {
 }
 
 /**
- * ACP AvailableCommand representation for a discovered slash command.
- */
-interface AvailableCommandInfo {
-  /** Command name without leading slash */
-  name: string;
-  /** Description shown to the user */
-  description: string;
-  /** Whether the command accepts arguments */
-  acceptsArgs: boolean;
-  /** Where this command came from */
-  source: "builtin" | "skill" | "prompt";
-}
-
-/**
- * Discover all available slash commands from:
+ * Discover all available slash commands as ACP AvailableCommand[] from:
  * - Built-in commands (our subset)
  * - Skills loaded by the session (via resource loader)
  * - Prompt templates
  */
-export function discoverCommands(session: AgentSession): AvailableCommandInfo[] {
-  const commands: AvailableCommandInfo[] = [];
+export function discoverCommands(session: AgentSession): AvailableCommand[] {
+  const commands: AvailableCommand[] = [];
 
   for (const cmd of builtinCommands) {
     commands.push({
       name: cmd.name,
       description: cmd.description,
-      acceptsArgs: cmd.acceptsArgs,
-      source: "builtin",
+      ...(cmd.acceptsArgs ? { input: { hint: "Arguments for the command" } } : {}),
     });
   }
 
@@ -74,8 +60,7 @@ export function discoverCommands(session: AgentSession): AvailableCommandInfo[] 
           commands.push({
             name: `skill:${skill.name}`,
             description: skill.description || `Skill: ${skill.name}`,
-            acceptsArgs: true,
-            source: "skill",
+            input: { hint: "Arguments for the command" },
           });
         }
       }
@@ -93,8 +78,7 @@ export function discoverCommands(session: AgentSession): AvailableCommandInfo[] 
           commands.push({
             name: `:${template.name}`,
             description: template.description || `Prompt template: ${template.name}`,
-            acceptsArgs: true,
-            source: "prompt",
+            input: { hint: "Arguments for the command" },
           });
         }
       }

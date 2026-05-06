@@ -20,6 +20,10 @@ function createMockModel(overrides?: Partial<Model<any>>): Model<any> {
   } as Model<any>;
 }
 
+function createTextPrompt(text: string): ContentBlock[] {
+  return [{ type: "text", text }];
+}
+
 describe("convertPromptContent", () => {
   const visionModel = createMockModel({
     id: "gpt-4o",
@@ -242,8 +246,6 @@ describe("convertPromptContent", () => {
 });
 
 describe("deriveSessionName", () => {
-  const createTextPrompt = (text: string): ContentBlock[] => [{ type: "text", text }];
-
   it("returns the trimmed first line of text", () => {
     expect(deriveSessionName(createTextPrompt("Hello, how are you?"))).toBe("Hello, how are you?");
   });

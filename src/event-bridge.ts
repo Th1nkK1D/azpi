@@ -128,17 +128,18 @@ export function mapSessionEvent(
 }
 
 /**
- * Extracts the first text content from a Pi AgentMessage.
+ * Extracts text content from a Pi AgentMessage, joining all text parts.
  */
-function extractTextContent(message: any): string | null {
+export function extractTextContent(message: any): string | null {
   if (typeof message?.content === "string") {
     return message.content;
   }
   if (Array.isArray(message?.content)) {
-    for (const block of message.content) {
-      if (block.type === "text" && typeof block.text === "string") {
-        return block.text;
-      }
+    const parts = message.content
+      .filter((block: any) => block.type === "text" && typeof block.text === "string")
+      .map((block: any) => block.text);
+    if (parts.length > 0) {
+      return parts.join("");
     }
   }
   return null;

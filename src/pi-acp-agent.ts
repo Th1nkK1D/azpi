@@ -3,7 +3,6 @@ import type {
   Agent,
   AgentSideConnection,
   AuthenticateRequest,
-  AvailableCommand,
   CancelNotification,
   ClientCapabilities,
   CloseSessionRequest,
@@ -42,7 +41,12 @@ import type { Model } from "@mariozechner/pi-ai";
 import { createAcpProxyTools } from "./client-tool-proxy";
 import { mapSessionEvent, mapStopReason } from "./event-bridge";
 import { convertPromptContent, deriveSessionName } from "./prompt-content";
-import { buildModelConfigOption, buildModelState, buildThinkingLevelConfigOption } from "./config";
+import {
+  buildModelConfigOption,
+  buildModelState,
+  buildThinkingLevelConfigOption,
+  resolveModelById,
+} from "./model";
 import { buildStartupMessage } from "./startup-message";
 import { name as AGENT_NAME, version as AGENT_VERSION } from "../package.json";
 import { findBuiltinCommand, parseSlashCommand, discoverCommands } from "./slash-commands";
@@ -86,8 +90,8 @@ export class PiAcpAgent implements Agent {
     this.availableModels = this.modelRegistry.getAvailable();
   }
 
-  async initialize(params: InitializeRequest): Promise<InitializeResponse> {
-    this.clientCapabilities = params.clientCapabilities;
+  async initialize({ clientCapabilities }: InitializeRequest): Promise<InitializeResponse> {
+    this.clientCapabilities = clientCapabilities;
 
     const anyModelSupportsImage = this.availableModels.some((m) => m.input.includes("image"));
 
@@ -115,6 +119,199 @@ export class PiAcpAgent implements Agent {
     return response;
   }
 
+  async authenticate(_params: AuthenticateRequest): Promise<void> {
+    // Not support interactive auth, use API Keys instead
+  }
+
+  async newSession({ cwd }: NewSessionRequest): Promise<NewSessionResponse> {
+    const { session, sessionId } = await this.createAndRegisterSession({
+      cwd: cwd ?? process.cwd(),
+    });
+
+    if (!session.model && this.availableModels.length > 0) {
+      await session.setModel(this.availableModels[0]!);
+    }
+
+    this.safeNotify(() => this.discoverAndEmitCommands(sessionId));
+
+    this.safeNotify(() =>
+      this.connection.sessionUpdate({
+        sessionId,
+        update: {
+          content: { text: buildStartupMessage(session), type: "text" },
+          sessionUpdate: "agent_message_chunk",
+        },
+      }),
+    );
+
+    return {
+      sessionId,
+      models: session.model ? buildModelState(this.availableModels, session.model) : undefined,
+      configOptions: this.buildConfigOptions(session),
+    };
+  }
+
+  async loadSession(params: LoadSessionRequest): Promise<LoadSessionResponse> {
+    const cwd = params.cwd ?? process.cwd();
+    const { sessionId } = params;
+
+    const sessionPath = await this.sessionResolver.resolveSessionPath(cwd, sessionId);
+
+    const { session } = await this.createAndRegisterSession({ cwd, sessionId, sessionPath });
+
+    if (sessionPath) {
+      await replaySessionHistory(session, sessionId, this.connection);
+    }
+
+    this.safeNotify(() => this.discoverAndEmitCommands(sessionId));
+
+    return {
+      models: session.model ? buildModelState(this.availableModels, session.model) : undefined,
+      configOptions: this.buildConfigOptions(session),
+    };
+  }
+
+  async unstable_resumeSession({
+    sessionId,
+  }: ResumeSessionRequest): Promise<ResumeSessionResponse> {
+    const cwd = process.cwd();
+    const sessionPath = await this.sessionResolver.resolveSessionPath(cwd, sessionId);
+
+    await this.createAndRegisterSession({ cwd, sessionId, sessionPath });
+
+    // Return without replaying history
+    return {};
+  }
+
+  async unstable_listSessions(params: ListSessionsRequest): Promise<ListSessionsResponse> {
+    const cwd = params.cwd ?? process.cwd();
+
+    await this.sessionResolver.warmCache(cwd);
+
+    const sessions: SessionInfo[] = (await SessionManager.list(cwd)).map((info) => ({
+      sessionId: info.id,
+      cwd: info.cwd,
+      title: info.name || undefined,
+      updatedAt: info.modified.toISOString(),
+      _meta: {
+        messageCount: info.messageCount,
+      },
+    }));
+
+    return { sessions };
+  }
+
+  async unstable_setSessionModel({
+    sessionId,
+    modelId,
+  }: SetSessionModelRequest): Promise<SetSessionModelResponse> {
+    const session = this.getSessionOrThrow(sessionId);
+    const model = resolveModelById(this.modelRegistry, modelId);
+    await session.setModel(model);
+    await this.sendConfigOptionsUpdate(sessionId);
+
+    return {};
+  }
+
+  async setSessionConfigOption({
+    sessionId,
+    configId,
+    value,
+  }: SetSessionConfigOptionRequest): Promise<SetSessionConfigOptionResponse> {
+    const session = this.getSessionOrThrow(sessionId);
+
+    if (configId === "model") {
+      const model = resolveModelById(this.modelRegistry, value as string);
+      await session.setModel(model);
+    } else if (configId === "thinking-level") {
+      session.setThinkingLevel(value as AgentSession["thinkingLevel"]);
+    } else {
+      throw RequestError.invalidParams(`Unknown config option: ${configId}`);
+    }
+
+    return {
+      configOptions: this.buildConfigOptions(session),
+    };
+  }
+
+  async prompt({ sessionId, prompt }: PromptRequest): Promise<PromptResponse> {
+    const session = this.getSessionOrThrow(sessionId);
+
+    const { text, images } = convertPromptContent(prompt, session.model);
+
+    const matchCommand = parseSlashCommand(text);
+    if (matchCommand) {
+      const builtin = findBuiltinCommand(matchCommand.name);
+      if (builtin) {
+        const result = await builtin.execute(session, matchCommand.args);
+
+        if (matchCommand.name === "reload") {
+          this.safeNotify(() => this.discoverAndEmitCommands(sessionId));
+        }
+
+        await this.connection.sessionUpdate({
+          sessionId,
+          update: {
+            content: { text: result.text, type: "text" },
+            sessionUpdate: "agent_message_chunk",
+          },
+        });
+
+        return { stopReason: "end_turn" };
+      }
+    }
+
+    if (!session.sessionName && !matchCommand) {
+      const name = deriveSessionName(prompt);
+      if (name) {
+        session.setSessionName(name);
+      }
+    }
+
+    const controller = new AbortController();
+    this.abortControllers.set(sessionId, controller);
+
+    const promptPromise = new Promise<PromptResponse>((resolve) => {
+      this.pendingPrompts.set(sessionId, { resolve });
+    });
+
+    session.prompt(text, images.length > 0 ? { images } : undefined).catch((_error: Error) => {
+      const existing = this.pendingPrompts.get(sessionId);
+      if (existing) {
+        existing.resolve({ stopReason: "end_turn" });
+      }
+    });
+
+    const result = await promptPromise;
+    this.abortControllers.delete(sessionId);
+    return result;
+  }
+
+  async cancel({ sessionId }: CancelNotification): Promise<void> {
+    const session = this.sessions.get(sessionId);
+    if (!session) {
+      return;
+    }
+
+    const pending = this.pendingPrompts.get(sessionId);
+    if (pending) {
+      await session.abort();
+      this.pendingPrompts.delete(sessionId);
+      pending.resolve({ stopReason: "cancelled" });
+    }
+  }
+
+  async closeSession({ sessionId }: CloseSessionRequest): Promise<void> {
+    await this.cleanupSession(sessionId);
+  }
+
+  async close(): Promise<void> {
+    const sessionIds = [...this.sessions.keys()];
+    for (const id of sessionIds) {
+      this.cleanupSession(id);
+    }
+  }
+
   private buildConfigOptions(session: AgentSession): SessionConfigOption[] {
     return [
       buildModelConfigOption(session, this.availableModels),
@@ -137,396 +334,58 @@ export class PiAcpAgent implements Agent {
     await this.connection.sessionUpdate(notification);
   }
 
-  async newSession(params: NewSessionRequest): Promise<NewSessionResponse> {
-    const cwd = params.cwd ?? process.cwd();
-
-    let session: AgentSession;
-    let sessionId: string;
-
+  private async createAndRegisterSession({
+    cwd,
+    sessionId,
+    sessionPath,
+  }: {
+    cwd: string;
+    sessionId?: string;
+    sessionPath?: string;
+  }): Promise<{ session: AgentSession; sessionId: string }> {
     if (this.options.sessionFactory) {
       const result = await this.options.sessionFactory(cwd);
-      session = result.session;
-      sessionId = session.sessionId;
-    } else {
-      const sessionManager = SessionManager.create(cwd);
-      sessionId = sessionManager.getSessionId();
+      const session = result.session;
+      const resolvedSessionId = session.sessionId;
+      this.registerSession(resolvedSessionId, session);
+      return { session, sessionId: resolvedSessionId };
+    }
 
-      const proxyTools = createAcpProxyTools({
+    const sessionManager = sessionPath
+      ? SessionManager.open(sessionPath)
+      : SessionManager.create(cwd);
+
+    const resolvedSessionId = sessionId ?? sessionManager.getSessionId();
+
+    const { session } = await createAgentSession({
+      cwd,
+      sessionManager,
+      tools: ["read", "bash", "edit", "write"],
+      customTools: createAcpProxyTools({
         connection: this.connection,
-        sessionId,
+        sessionId: resolvedSessionId,
         capabilities: this.clientCapabilities,
         cwd,
-      });
+      }),
+      authStorage: this.authStorage,
+      modelRegistry: this.modelRegistry,
+      ...this.options.sessionOptions,
+    });
 
-      const result = await createAgentSession({
-        cwd,
-        sessionManager,
-        // Custom tools with the same name override built-ins;
-        // the allowlist keeps all 4 tool slots regardless of which we override.
-        tools: ["read", "bash", "edit", "write"],
-        customTools: proxyTools,
-        authStorage: this.authStorage,
-        modelRegistry: this.modelRegistry,
-        ...this.options.sessionOptions,
-      });
-      session = result.session;
-    }
+    this.registerSession(resolvedSessionId, session);
 
-    if (!session.model && this.availableModels.length > 0) {
-      await session.setModel(this.availableModels[0]!);
-    }
+    return { session, sessionId: resolvedSessionId };
+  }
 
+  private registerSession(sessionId: string, session: AgentSession): void {
     this.sessions.set(sessionId, session);
-
     if (session.sessionFile) {
       this.sessionResolver.registerSession(sessionId, session.sessionFile);
     }
-
     const unsubscribe = session.subscribe((event: AgentSessionEvent) => {
       this.onEvent(sessionId, event);
     });
     this.unsubscribers.set(sessionId, unsubscribe);
-
-    const response: NewSessionResponse = { sessionId };
-
-    if (session.model) {
-      response.models = buildModelState(this.availableModels, session.model);
-    }
-
-    response.configOptions = this.buildConfigOptions(session);
-
-    this.discoverAndEmitCommands(sessionId).catch(() => {
-      // Connection may be closing; ignore
-    });
-
-    const message = buildStartupMessage(session);
-    this.connection
-      .sessionUpdate({
-        sessionId,
-        update: {
-          content: { text: message, type: "text" },
-          sessionUpdate: "agent_message_chunk",
-        },
-      })
-      .catch(() => {
-        // Connection may be closing; ignore
-      });
-
-    return response;
-  }
-
-  async prompt(params: PromptRequest): Promise<PromptResponse> {
-    const session = this.sessions.get(params.sessionId);
-    if (!session) {
-      throw RequestError.invalidParams(`Unknown session: ${params.sessionId}`);
-    }
-
-    const { text, images } = convertPromptContent(params.prompt, session.model);
-
-    const matchCommand = parseSlashCommand(text);
-    if (matchCommand) {
-      const builtin = findBuiltinCommand(matchCommand.name);
-      if (builtin) {
-        const result = await builtin.execute(session, matchCommand.args);
-
-        if (matchCommand.name === "reload") {
-          this.discoverAndEmitCommands(params.sessionId).catch(() => {
-            // Connection may be closing; ignore
-          });
-        }
-
-        await this.connection.sessionUpdate({
-          sessionId: params.sessionId,
-          update: {
-            content: { text: result.text, type: "text" },
-            sessionUpdate: "agent_message_chunk",
-          },
-        });
-
-        return { stopReason: "end_turn" };
-      }
-    }
-
-    if (!session.sessionName && !matchCommand) {
-      const name = deriveSessionName(params.prompt);
-      if (name) {
-        session.setSessionName(name);
-      }
-    }
-
-    const controller = new AbortController();
-    this.abortControllers.set(params.sessionId, controller);
-
-    const promptPromise = new Promise<PromptResponse>((resolve) => {
-      this.pendingPrompts.set(params.sessionId, { resolve });
-    });
-
-    session.prompt(text, images.length > 0 ? { images } : undefined).catch((_error: Error) => {
-      const existing = this.pendingPrompts.get(params.sessionId);
-      if (existing) {
-        existing.resolve({ stopReason: "end_turn" });
-      }
-    });
-
-    const result = await promptPromise;
-    this.abortControllers.delete(params.sessionId);
-    return result;
-  }
-
-  async cancel(params: CancelNotification): Promise<void> {
-    const session = this.sessions.get(params.sessionId);
-    if (!session) {
-      return;
-    }
-
-    const pending = this.pendingPrompts.get(params.sessionId);
-    if (pending) {
-      await session.abort();
-      this.pendingPrompts.delete(params.sessionId);
-      pending.resolve({ stopReason: "cancelled" });
-    }
-  }
-
-  async closeSession(params: CloseSessionRequest): Promise<void> {
-    await this.cleanupSession(params.sessionId);
-  }
-
-  async loadSession(params: LoadSessionRequest): Promise<LoadSessionResponse> {
-    const cwd = params.cwd ?? process.cwd();
-    const { sessionId } = params;
-
-    const sessionPath = await this.sessionResolver.resolveSessionPath(cwd, sessionId);
-    const isNewSession = !sessionPath;
-
-    const proxyTools = createAcpProxyTools({
-      connection: this.connection,
-      sessionId,
-      capabilities: this.clientCapabilities,
-      cwd,
-    });
-
-    const { session } = this.options.sessionFactory
-      ? await this.options.sessionFactory(cwd)
-      : await createAgentSession({
-          cwd,
-          sessionManager: isNewSession
-            ? SessionManager.create(cwd)
-            : SessionManager.open(sessionPath!),
-          tools: ["read", "bash", "edit", "write"],
-          customTools: proxyTools,
-          authStorage: this.authStorage,
-          modelRegistry: this.modelRegistry,
-          ...this.options.sessionOptions,
-        });
-
-    if (session.sessionFile) {
-      this.sessionResolver.registerSession(sessionId, session.sessionFile);
-    }
-
-    this.sessions.set(sessionId, session);
-
-    const unsubscribe = session.subscribe((event: AgentSessionEvent) => {
-      this.onEvent(sessionId, event);
-    });
-    this.unsubscribers.set(sessionId, unsubscribe);
-
-    if (!isNewSession) {
-      await replaySessionHistory(session, sessionId, this.connection);
-    }
-
-    const response: LoadSessionResponse = {};
-    if (session.model) {
-      response.models = buildModelState(this.availableModels, session.model);
-    }
-    response.configOptions = this.buildConfigOptions(session);
-
-    this.discoverAndEmitCommands(sessionId).catch(() => {
-      // Connection may be closing; ignore
-    });
-
-    return response;
-  }
-
-  async unstable_resumeSession(params: ResumeSessionRequest): Promise<ResumeSessionResponse> {
-    const cwd = process.cwd();
-    const { sessionId } = params;
-
-    const sessionPath = await this.sessionResolver.resolveSessionPath(cwd, sessionId);
-    const isNewSession = !sessionPath;
-
-    const proxyTools = createAcpProxyTools({
-      connection: this.connection,
-      sessionId,
-      capabilities: this.clientCapabilities,
-      cwd,
-    });
-
-    const { session } = this.options.sessionFactory
-      ? await this.options.sessionFactory(cwd)
-      : await createAgentSession({
-          cwd,
-          sessionManager: isNewSession
-            ? SessionManager.create(cwd)
-            : SessionManager.open(sessionPath!),
-          tools: ["read", "bash", "edit", "write"],
-          customTools: proxyTools,
-          authStorage: this.authStorage,
-          modelRegistry: this.modelRegistry,
-          ...this.options.sessionOptions,
-        });
-
-    if (session.sessionFile) {
-      this.sessionResolver.registerSession(sessionId, session.sessionFile);
-    }
-
-    this.sessions.set(sessionId, session);
-
-    const unsubscribe = session.subscribe((event: AgentSessionEvent) => {
-      this.onEvent(sessionId, event);
-    });
-    this.unsubscribers.set(sessionId, unsubscribe);
-
-    // Return without replaying history
-    return {};
-  }
-
-  async unstable_listSessions(params: ListSessionsRequest): Promise<ListSessionsResponse> {
-    const cwd = params.cwd ?? process.cwd();
-
-    await this.sessionResolver.warmCache(cwd);
-
-    const piSessions = await SessionManager.list(cwd);
-
-    const sessions: SessionInfo[] = piSessions.map((info) => ({
-      sessionId: info.id,
-      cwd: info.cwd,
-      title: info.name || undefined,
-      updatedAt: info.modified.toISOString(),
-      _meta: {
-        messageCount: info.messageCount,
-      },
-    }));
-
-    return { sessions };
-  }
-
-  async authenticate(_params: AuthenticateRequest): Promise<void> {
-    // No auth in MVP
-  }
-
-  async unstable_setSessionModel(params: SetSessionModelRequest): Promise<SetSessionModelResponse> {
-    const session = this.sessions.get(params.sessionId);
-    if (!session) {
-      throw RequestError.invalidParams(`Unknown session: ${params.sessionId}`);
-    }
-
-    const parts = params.modelId.split("/", 2);
-    if (parts.length !== 2) {
-      throw RequestError.invalidParams(`Invalid modelId: ${params.modelId}`);
-    }
-
-    const provider = parts[0]!;
-    const modelId = parts[1]!;
-    const model = this.modelRegistry.find(provider, modelId);
-    if (!model) {
-      throw RequestError.invalidParams(`Unknown model: ${params.modelId}`);
-    }
-
-    await session.setModel(model);
-    await this.sendConfigOptionsUpdate(params.sessionId);
-
-    return {};
-  }
-
-  async setSessionConfigOption(
-    params: SetSessionConfigOptionRequest,
-  ): Promise<SetSessionConfigOptionResponse> {
-    const session = this.sessions.get(params.sessionId);
-    if (!session) {
-      throw RequestError.invalidParams(`Unknown session: ${params.sessionId}`);
-    }
-
-    if (params.configId === "model") {
-      const modelId = params.value as string;
-      const parts = modelId.split("/", 2);
-      if (parts.length !== 2) {
-        throw RequestError.invalidParams(`Invalid modelId: ${modelId}`);
-      }
-      const provider = parts[0]!;
-      const id = parts[1]!;
-      const model = this.modelRegistry.find(provider, id);
-      if (!model) {
-        throw RequestError.invalidParams(`Unknown model: ${modelId}`);
-      }
-      await session.setModel(model);
-    } else if (params.configId === "thinking-level") {
-      session.setThinkingLevel(params.value as AgentSession["thinkingLevel"]);
-    } else {
-      throw RequestError.invalidParams(`Unknown config option: ${params.configId}`);
-    }
-
-    return {
-      configOptions: this.buildConfigOptions(session),
-    };
-  }
-
-  private onEvent(sessionId: string, event: AgentSessionEvent): void {
-    const session = this.sessions.get(sessionId);
-    const configOptions = session ? this.buildConfigOptions(session) : undefined;
-    const notification = mapSessionEvent(event, sessionId, configOptions);
-    if (notification) {
-      this.connection.sessionUpdate(notification).catch(() => {
-        // Connection may be closing; ignore
-      });
-    }
-
-    if (event.type === "agent_end") {
-      const lastMessage = event.messages[event.messages.length - 1];
-      const stopReason = mapStopReason(lastMessage);
-
-      const pending = this.pendingPrompts.get(sessionId);
-      if (pending) {
-        this.pendingPrompts.delete(sessionId);
-        pending.resolve({ stopReason });
-      }
-
-      this.connection
-        .sessionUpdate({
-          sessionId,
-          update: {
-            sessionUpdate: "session_info_update",
-            updatedAt: new Date().toISOString(),
-          },
-        })
-        .catch(() => {});
-    }
-  }
-
-  private async discoverAndEmitCommands(sessionId: string): Promise<void> {
-    const session = this.sessions.get(sessionId);
-    if (!session) return;
-
-    const availableCommands: AvailableCommand[] = discoverCommands(session).map((cmd) => {
-      const acpCmd: AvailableCommand = {
-        name: cmd.name,
-        description: cmd.description,
-      };
-
-      if (cmd.acceptsArgs) {
-        acpCmd.input = { hint: "Arguments for the command" };
-      }
-      return acpCmd;
-    });
-
-    const notification: SessionNotification = {
-      sessionId,
-      update: {
-        sessionUpdate: "available_commands_update",
-        availableCommands,
-      },
-    };
-
-    await this.connection.sessionUpdate(notification);
   }
 
   private async cleanupSession(sessionId: string): Promise<void> {
@@ -558,10 +417,62 @@ export class PiAcpAgent implements Agent {
     this.abortControllers.delete(sessionId);
   }
 
-  async close(): Promise<void> {
-    const sessionIds = [...this.sessions.keys()];
-    for (const id of sessionIds) {
-      this.cleanupSession(id);
+  private getSessionOrThrow(sessionId: string): AgentSession {
+    const session = this.sessions.get(sessionId);
+    if (!session) {
+      throw RequestError.invalidParams(`Unknown session: ${sessionId}`);
     }
+    return session;
+  }
+
+  private onEvent(sessionId: string, event: AgentSessionEvent): void {
+    const session = this.sessions.get(sessionId);
+    const configOptions = session ? this.buildConfigOptions(session) : undefined;
+    const notification = mapSessionEvent(event, sessionId, configOptions);
+    if (notification) {
+      this.safeNotify(() => this.connection.sessionUpdate(notification));
+    }
+
+    if (event.type === "agent_end") {
+      const lastMessage = event.messages[event.messages.length - 1];
+      const stopReason = mapStopReason(lastMessage);
+
+      const pending = this.pendingPrompts.get(sessionId);
+      if (pending) {
+        this.pendingPrompts.delete(sessionId);
+        pending.resolve({ stopReason });
+      }
+
+      this.safeNotify(() =>
+        this.connection.sessionUpdate({
+          sessionId,
+          update: {
+            sessionUpdate: "session_info_update",
+            updatedAt: new Date().toISOString(),
+          },
+        }),
+      );
+    }
+  }
+
+  private async discoverAndEmitCommands(sessionId: string): Promise<void> {
+    const session = this.sessions.get(sessionId);
+    if (!session) return;
+
+    const notification: SessionNotification = {
+      sessionId,
+      update: {
+        sessionUpdate: "available_commands_update",
+        availableCommands: discoverCommands(session),
+      },
+    };
+
+    await this.connection.sessionUpdate(notification);
+  }
+
+  private safeNotify(fn: () => Promise<void>): void {
+    fn().catch(() => {
+      // Connection may be closing; ignore
+    });
   }
 }
