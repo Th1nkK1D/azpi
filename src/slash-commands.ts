@@ -198,28 +198,27 @@ async function executeName(session: AgentSession, args: string): Promise<SlashCo
  */
 async function executeSession(session: AgentSession): Promise<SlashCommandResult> {
   const stats = session.getSessionStats();
-
   const lines: string[] = [];
-  if (stats.sessionFile) lines.push(`File: ${stats.sessionFile}`);
-  lines.push(`Session ID: ${stats.sessionId}`);
-  if (session.sessionName) lines.push(`Name: ${session.sessionName}`);
-  lines.push(
-    `Messages: ${stats.userMessages} user, ${stats.assistantMessages} assistant, ${stats.toolCalls} tool calls`,
-  );
-  lines.push(
-    `Tokens: ${stats.tokens.total} (input: ${stats.tokens.input}, output: ${stats.tokens.output})`,
-  );
-  lines.push(`Cost: $${stats.cost.toFixed(4)}`);
 
+  if (session.sessionName) lines.push(`- Name: ${session.sessionName}`);
+  lines.push(`- ID: ${stats.sessionId}`);
+  if (stats.sessionFile) lines.push(`- File: ${stats.sessionFile}`);
   if (stats.contextUsage) {
     const cu = stats.contextUsage;
     if (cu.percent !== null) {
       const tokens = cu.tokens?.toLocaleString() ?? "?";
       lines.push(
-        `Context: ${cu.percent.toFixed(1)}% (${tokens} / ${cu.contextWindow.toLocaleString()})`,
+        `- Context: ${cu.percent.toFixed(1)}% (${tokens} / ${cu.contextWindow.toLocaleString()})`,
       );
     }
   }
+  lines.push(
+    `- Messages: ${stats.userMessages.toLocaleString()} user, ${stats.assistantMessages.toLocaleString()} assistant, ${stats.toolCalls.toLocaleString()} tool calls`,
+  );
+  lines.push(
+    `- Tokens: ${stats.tokens.total.toLocaleString()} (${stats.tokens.input.toLocaleString()} input, ${stats.tokens.output.toLocaleString()} output, ${stats.tokens.cacheRead.toLocaleString()} cache-read, ${stats.tokens.cacheWrite.toLocaleString()} cache-write)`,
+  );
+  lines.push(`- Cost Estimation: $${stats.cost.toFixed(4)}`);
 
   return { text: lines.join("\n") };
 }
