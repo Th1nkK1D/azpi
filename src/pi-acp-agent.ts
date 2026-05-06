@@ -360,7 +360,6 @@ export class PiAcpAgent implements Agent {
     const { session } = await createAgentSession({
       cwd,
       sessionManager,
-      tools: ["read", "bash", "edit", "write"],
       customTools: createAcpProxyTools({
         connection: this.connection,
         sessionId: resolvedSessionId,
