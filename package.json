@@ -23,9 +23,7 @@
     "husky": "^9.1.7",
     "lint-staged": "^16.4.0",
     "oxfmt": "^0.47.0",
-    "oxlint": "^1.62.0"
-  },
-  "peerDependencies": {
+    "oxlint": "^1.62.0",
     "typescript": "^5"
   },
   "lint-staged": {
