@@ -11,6 +11,7 @@
     "build:assets": "cp -r package.json node_modules/@mariozechner/pi-coding-agent/dist/core/export-html node_modules/@mariozechner/pi-coding-agent/dist/modes/interactive/theme ./dist/",
     "format": "oxfmt --write",
     "lint": "oxlint --fix",
+    "lint:agent": "oxlint --fix -f agent",
     "check": "tsc --noEmit"
   },
   "dependencies": {
@@ -22,8 +23,8 @@
     "@types/bun": "latest",
     "husky": "^9.1.7",
     "lint-staged": "^16.4.0",
-    "oxfmt": "^0.47.0",
-    "oxlint": "^1.62.0",
+    "oxfmt": "^0.48.0",
+    "oxlint": "^1.63.0",
     "typescript": "^5"
   },
   "lint-staged": {
