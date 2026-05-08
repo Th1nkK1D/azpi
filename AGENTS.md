@@ -7,6 +7,7 @@
   - Lint with `bun run lint:agent`, all errors and warnings must be fixed
   - Tests with `bun test` to confirm that everything is working
   - Format code with `bun run format` before declaring task as done
+- Human will get in the loop and edit some file along the way. If you spot it, please respect those changes
 
 # References
 
