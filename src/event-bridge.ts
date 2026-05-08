@@ -4,7 +4,7 @@ import type {
   StopReason,
   ContentBlock,
 } from "@agentclientprotocol/sdk";
-import type { AgentSessionEvent } from "@mariozechner/pi-coding-agent";
+import type { AgentSessionEvent } from "@earendil-works/pi-coding-agent";
 import { mapToolCallEnd, mapToolCallStart, mapToolCallUpdate } from "./tool-call-mapper";
 
 /**

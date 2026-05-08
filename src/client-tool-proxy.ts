@@ -1,7 +1,7 @@
 /* eslint-disable no-await-in-loop */
 import type { AgentSideConnection, ClientCapabilities } from "@agentclientprotocol/sdk";
-import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
-import { defineTool } from "@mariozechner/pi-coding-agent";
+import type { ToolDefinition } from "@earendil-works/pi-coding-agent";
+import { defineTool } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { resolve as _resolve } from "path";
 

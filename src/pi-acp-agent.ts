@@ -31,13 +31,13 @@ import {
   ModelRegistry,
   SessionManager,
   createAgentSession,
-} from "@mariozechner/pi-coding-agent";
+} from "@earendil-works/pi-coding-agent";
 import type {
   AgentSession,
   AgentSessionEvent,
   CreateAgentSessionOptions,
-} from "@mariozechner/pi-coding-agent";
-import type { Model } from "@mariozechner/pi-ai";
+} from "@earendil-works/pi-coding-agent";
+import type { Model } from "@earendil-works/pi-ai";
 import { createAcpProxyTools } from "./client-tool-proxy";
 import { mapSessionEvent, mapStopReason } from "./event-bridge";
 import { convertPromptContent, deriveSessionName } from "./prompt-content";

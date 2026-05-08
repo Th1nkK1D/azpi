@@ -1,5 +1,5 @@
-import { SessionManager } from "@mariozechner/pi-coding-agent";
-import type { AgentSession } from "@mariozechner/pi-coding-agent";
+import { SessionManager } from "@earendil-works/pi-coding-agent";
+import type { AgentSession } from "@earendil-works/pi-coding-agent";
 import type { AgentSideConnection } from "@agentclientprotocol/sdk";
 import { extractTextContent } from "./event-bridge";
 

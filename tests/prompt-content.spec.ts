@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { RequestError } from "@agentclientprotocol/sdk";
 import type { ContentBlock } from "@agentclientprotocol/sdk";
 import { convertPromptContent, deriveSessionName } from "../src/prompt-content";
-import type { Model } from "@mariozechner/pi-ai";
+import type { Model } from "@earendil-works/pi-ai";
 
 function createMockModel(overrides?: Partial<Model<any>>): Model<any> {
   return {
@@ -301,7 +301,7 @@ describe("deriveSessionName", () => {
         {
           type: "resource",
           resource: {
-            text: '{ \n  "name":  "azpi", \n  "version":  "0.1.0", \n  "private":  true, \n  "type":  "module", \n  "scripts":  { \n    "prepare":  "husky", \n    "test":  "bun test", \n    "build":  "bun run build: binary && bun run build: assets", \n    "build: binary":  "bun build src/index.ts --compile --minify --outfile dist/azpi", \n    "build: assets":  "cp -r package.json node_modules/@mariozechner/pi-coding-agent/dist/core/export-html node_modules/@mariozechner/pi-coding-agent/dist/modes/interactive/theme ./dist/", \n    "format":  "oxfmt --write", \n    "lint":  "oxlint --fix", \n    "check":  "tsc --noEmit"\n   }, \n  "dependencies":  { \n    "@agentclientprotocol/sdk":  "^0.21.0", \n    "@mariozechner/pi-ai":  "^0.73.0", \n    "@mariozechner/pi-coding-agent":  "^0.73.0"\n   }, \n  "devDependencies":  { \n    "@types/bun":  "latest", \n    "husky":  "^9.1.7", \n    "lint-staged":  "^16.4.0", \n    "oxfmt":  "^0.47.0", \n    "oxlint":  "^1.62.0"\n   }, \n  "peerDependencies":  { \n    "typescript":  "^5"\n   }, \n  "lint-staged":  { \n    "*.{ ts, tsx, js, jsx, mjs, cjs }":  [\n      "oxlint --fix"\n    ], \n    "*":  [\n      "oxfmt --write"\n    ]\n   }\n }\n',
+            text: '{ \n  "name":  "azpi", \n  "version":  "0.1.0", \n  "private":  true, \n  "type":  "module", \n  "scripts":  { \n    "prepare":  "husky", \n    "test":  "bun test", \n    "build":  "bun run build: binary && bun run build: assets", \n    "build: binary":  "bun build src/index.ts --compile --minify --outfile dist/azpi", \n    "build: assets":  "cp -r package.json node_modules/@earendil-works/pi-coding-agent/dist/core/export-html node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/theme ./dist/", \n    "format":  "oxfmt --write", \n    "lint":  "oxlint --fix", \n    "check":  "tsc --noEmit"\n   }, \n  "dependencies":  { \n    "@agentclientprotocol/sdk":  "^0.21.0", \n    "@earendil-works/pi-ai":  "^0.73.0", \n    "@earendil-works/pi-coding-agent":  "^0.73.0"\n   }, \n  "devDependencies":  { \n    "@types/bun":  "latest", \n    "husky":  "^9.1.7", \n    "lint-staged":  "^16.4.0", \n    "oxfmt":  "^0.47.0", \n    "oxlint":  "^1.62.0"\n   }, \n  "peerDependencies":  { \n    "typescript":  "^5"\n   }, \n  "lint-staged":  { \n    "*.{ ts, tsx, js, jsx, mjs, cjs }":  [\n      "oxlint --fix"\n    ], \n    "*":  [\n      "oxfmt --write"\n    ]\n   }\n }\n',
             uri: "file: ///home/lkz/Repositories/azpi/package.json",
           },
         },

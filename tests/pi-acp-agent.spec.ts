@@ -8,8 +8,8 @@ import type {
 } from "@agentclientprotocol/sdk";
 import { PiAcpAgent } from "../src/pi-acp-agent";
 import { mapSessionEvent, mapStopReason } from "../src/event-bridge";
-import type { AgentSession } from "@mariozechner/pi-coding-agent";
-import type { Model } from "@mariozechner/pi-ai";
+import type { AgentSession } from "@earendil-works/pi-coding-agent";
+import type { Model } from "@earendil-works/pi-ai";
 
 function createMockConnection(): AgentSideConnection & {
   sessionUpdate: ReturnType<typeof mock>;

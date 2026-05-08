@@ -49,7 +49,7 @@ ACP primitives we will use:
 
 ## Reuse
 
-- `AuthStorage.create()` and `ModelRegistry.create(authStorage)` from `@mariozechner/pi-coding-agent` (default paths).
+- `AuthStorage.create()` and `ModelRegistry.create(authStorage)` from `@earendil-works/pi-coding-agent` (default paths).
 - `ModelRegistry.getAvailable()` — synchronous list of auth-ready models.
 - `ModelRegistry.find(provider, modelId)` — resolve model from ACP `modelId`.
 - `AgentSession.setModel(model)` — async model switch.

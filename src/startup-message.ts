@@ -1,5 +1,5 @@
-import type { AgentSession } from "@mariozechner/pi-coding-agent";
-import { version as PI_VERSION } from "../node_modules/@mariozechner/pi-coding-agent/package.json";
+import type { AgentSession } from "@earendil-works/pi-coding-agent";
+import { version as PI_VERSION } from "../node_modules/@earendil-works/pi-coding-agent/package.json";
 import { name as AGENT_NAME, version as AGENT_VERSION } from "../package.json";
 
 /**

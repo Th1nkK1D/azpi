@@ -9,7 +9,7 @@ The `azpi` project is an ACP (Agent Client Protocol) adapter for the Pi coding a
 Send an `agent_message_chunk` session update immediately after `newSession` returns (fire-and-forget to avoid blocking the response). The message will be formatted as markdown and include:
 
 1. **Agent name and version** — from `package.json` (already imported as `AGENT_NAME`, `AGENT_VERSION`)
-2. **Pi coding agent version** — from `@mariozechner/pi-coding-agent` `VERSION` export
+2. **Pi coding agent version** — from `@earendil-works/pi-coding-agent` `VERSION` export
 3. **Context files read** — from `session.resourceLoader.getAgentsFiles()`
 4. **Installed skills** — from `session.resourceLoader.getSkills()`
 5. **Installed extensions** — from `session.resourceLoader.getExtensions()`
@@ -30,7 +30,7 @@ We’ll fire the notification asynchronously _after_ `newSession` returns its re
 ## Reuse
 
 - `AGENT_NAME`, `AGENT_VERSION` from `package.json` already imported in `src/pi-acp-agent.ts`
-- `VERSION` from `@mariozechner/pi-coding-agent/dist/config.js`
+- `VERSION` from `@earendil-works/pi-coding-agent/dist/config.js`
 - `session.resourceLoader` APIs:
   - `getAgentsFiles()` → `{ agentsFiles: Array<{ path, content }> }`
   - `getSkills()` → `{ skills: Array<{ name, description, filePath }> }`
@@ -40,7 +40,7 @@ We’ll fire the notification asynchronously _after_ `newSession` returns its re
 ## Steps
 
 - [ ] Create `src/startup-info.ts` with:
-  - Import `VERSION` from `@mariozechner/pi-coding-agent`
+  - Import `VERSION` from `@earendil-works/pi-coding-agent`
   - Import `AGENT_NAME`, `AGENT_VERSION` from `../package.json`
   - Export `buildStartupMessage(session): string` that reads `session.resourceLoader` for:
     - Context files via `getAgentsFiles()`

@@ -5,8 +5,8 @@ import {
   findBuiltinCommand,
   discoverCommands,
 } from "../src/slash-commands";
-import type { AgentSession } from "@mariozechner/pi-coding-agent";
-import type { Model } from "@mariozechner/pi-ai";
+import type { AgentSession } from "@earendil-works/pi-coding-agent";
+import type { Model } from "@earendil-works/pi-ai";
 
 function createMockModel(overrides?: Partial<Model<any>>): Model<any> {
   return {

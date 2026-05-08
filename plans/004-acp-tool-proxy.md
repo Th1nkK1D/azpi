@@ -32,7 +32,7 @@ When the ACP client advertises `fs.readTextFile`, `fs.writeTextFile`, and/or `te
 ## Reuse
 
 - `@agentclientprotocol/sdk` — `AgentSideConnection.readTextFile()`, `writeTextFile()`, `createTerminal()` (returns `TerminalHandle` with `currentOutput()`, `waitForExit()`, `release()`).
-- `@mariozechner/pi-coding-agent` — `defineTool()` for custom tool definitions; `customTools` to override built-ins by name.
+- `@earendil-works/pi-coding-agent` — `defineTool()` for custom tool definitions; `customTools` to override built-ins by name.
 - Existing `src/tool-mapper.ts` — add helpers for building ACP shapes so proxy tools stay readable.
 
 ## Detailed Design

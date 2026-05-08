@@ -2,7 +2,7 @@
 
 ## Context
 
-We want to make the [pi coding agent](https://github.com/badlogic/pi-mono) accessible via the [Agent Client Protocol (ACP)](https://agentclientprotocol.com). ACP is a JSON-RPC 2.0 protocol that standardizes communication between code editors (Clients) and AI coding agents. Pi already has a rich TypeScript SDK (`@mariozechner/pi-coding-agent`) and its own proprietary RPC mode, but no native ACP support.
+We want to make the [pi coding agent](https://github.com/badlogic/pi-mono) accessible via the [Agent Client Protocol (ACP)](https://agentclientprotocol.com). ACP is a JSON-RPC 2.0 protocol that standardizes communication between code editors (Clients) and AI coding agents. Pi already has a rich TypeScript SDK (`@earendil-works/pi-coding-agent`) and its own proprietary RPC mode, but no native ACP support.
 
 The goal is a new adapter that wraps the Pi SDK so that any ACP-compatible client (e.g. Zed, or generic ACP clients) can launch and converse with pi.
 
@@ -10,7 +10,7 @@ The goal is a new adapter that wraps the Pi SDK so that any ACP-compatible clien
 
 - **ACP TypeScript SDK**: `@agentclientprotocol/sdk` provides `AgentSideConnection`, `acp.Agent` interface, `ndJsonStream`, and stdio transport.  
   _Example_: `github.com/agentclientprotocol/typescript-sdk/src/examples/agent.ts`
-- **Pi SDK**: `@mariozechner/pi-coding-agent` provides `createAgentSession()`, `AgentSession`, event streaming, built-in tools, session management, etc.
+- **Pi SDK**: `@earendil-works/pi-coding-agent` provides `createAgentSession()`, `AgentSession`, event streaming, built-in tools, session management, etc.
 - **Current codebase**: Nearly empty (`azpi` package). We are building the adapter from scratch.
 
 ## Approach
@@ -67,18 +67,18 @@ Pi does not have a built-in user-approval gate for destructive tools (edit, writ
 
 ## Files to create / modify
 
-| File                       | Purpose                                                                                                                  |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| `package.json`             | Add deps: `@agentclientprotocol/sdk`, `@mariozechner/pi-coding-agent`, `@mariozechner/pi-ai`, `typebox` (peer of pi sdk) |
-| `src/main.ts`              | Entry point: wire stdio to `acp.ndJsonStream` and instantiate `PiAcpAgent`                                               |
-| `src/main.spec.ts`         | Unit tests for bootstrap / stdio transport wiring                                                                        |
-| `src/pi-acp-agent.ts`      | Core class implementing `acp.Agent`, managing session lifecycle and event bridging                                       |
-| `src/pi-acp-agent.spec.ts` | Unit tests for `initialize`, `newSession`, `prompt`, `cancel`, session management                                        |
-| `src/event-bridge.ts`      | Maps Pi `AgentSessionEvent`s to ACP `SessionUpdate` objects                                                              |
-| `src/event-bridge.spec.ts` | Unit tests for every event mapping permutation                                                                           |
-| `src/tool-mapper.ts`       | Helpers to map Pi tool metadata to ACP `tool_call` shapes                                                                |
-| `src/tool-mapper.spec.ts`  | Unit tests for tool metadata → ACP shape conversion                                                                      |
-| `tsconfig.json`            | Ensure ESM / Node 20+ compatibility                                                                                      |
+| File                       | Purpose                                                                                                                      |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `package.json`             | Add deps: `@agentclientprotocol/sdk`, `@earendil-works/pi-coding-agent`, `@earendil-works/pi-ai`, `typebox` (peer of pi sdk) |
+| `src/main.ts`              | Entry point: wire stdio to `acp.ndJsonStream` and instantiate `PiAcpAgent`                                                   |
+| `src/main.spec.ts`         | Unit tests for bootstrap / stdio transport wiring                                                                            |
+| `src/pi-acp-agent.ts`      | Core class implementing `acp.Agent`, managing session lifecycle and event bridging                                           |
+| `src/pi-acp-agent.spec.ts` | Unit tests for `initialize`, `newSession`, `prompt`, `cancel`, session management                                            |
+| `src/event-bridge.ts`      | Maps Pi `AgentSessionEvent`s to ACP `SessionUpdate` objects                                                                  |
+| `src/event-bridge.spec.ts` | Unit tests for every event mapping permutation                                                                               |
+| `src/tool-mapper.ts`       | Helpers to map Pi tool metadata to ACP `tool_call` shapes                                                                    |
+| `src/tool-mapper.spec.ts`  | Unit tests for tool metadata → ACP shape conversion                                                                          |
+| `tsconfig.json`            | Ensure ESM / Node 20+ compatibility                                                                                          |
 
 ## Reuse
 
@@ -90,7 +90,7 @@ Pi does not have a built-in user-approval gate for destructive tools (edit, writ
 ## Steps
 
 - [ ] **Step 1 — Project setup**  
-       Install `@agentclientprotocol/sdk`, `@mariozechner/pi-coding-agent`, and peers. Configure `package.json` bin entry and tsconfig. Add `test` script using Bun's built-in test runner.
+       Install `@agentclientprotocol/sdk`, `@earendil-works/pi-coding-agent`, and peers. Configure `package.json` bin entry and tsconfig. Add `test` script using Bun's built-in test runner.
 
 - [ ] **Step 2 — Bootstrap stdio transport**  
        Create `src/main.ts` that creates an `acp.ndJsonStream` over `process.stdin`/`process.stdout` and passes it to `acp.AgentSideConnection` with our agent factory.  

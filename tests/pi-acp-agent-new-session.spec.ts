@@ -4,7 +4,7 @@ import type { AgentSideConnection } from "@agentclientprotocol/sdk";
 
 let capturedCreateAgentSessionOptions: any;
 
-mock.module("@mariozechner/pi-coding-agent", () => ({
+mock.module("@earendil-works/pi-coding-agent", () => ({
   VERSION: "0.0.0-test",
   AuthStorage: {
     create: () => ({}),

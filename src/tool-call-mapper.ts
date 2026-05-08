@@ -1,5 +1,5 @@
 import type { ToolCall, ToolCallUpdate } from "@agentclientprotocol/sdk";
-import type { AgentEvent } from "@mariozechner/pi-agent-core";
+import type { AgentEvent } from "@earendil-works/pi-agent-core";
 
 /**
  * Maps a Pi tool_execution_start event to an ACP ToolCall notification.

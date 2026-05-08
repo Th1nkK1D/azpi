@@ -8,7 +8,7 @@
     "test": "bun test",
     "build": "bun run build:binary && bun run build:assets",
     "build:binary": "bun build src/index.ts --compile --minify --outfile dist/azpi",
-    "build:assets": "cp -r package.json node_modules/@mariozechner/pi-coding-agent/dist/core/export-html node_modules/@mariozechner/pi-coding-agent/dist/modes/interactive/theme ./dist/",
+    "build:assets": "cp -r package.json node_modules/@earendil-works/pi-coding-agent/dist/core/export-html node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/theme ./dist/",
     "format": "oxfmt --write",
     "lint": "oxlint --fix",
     "lint:agent": "oxlint --fix -f agent",
@@ -16,8 +16,7 @@
   },
   "dependencies": {
     "@agentclientprotocol/sdk": "^0.21.0",
-    "@mariozechner/pi-ai": "^0.73.0",
-    "@mariozechner/pi-coding-agent": "^0.73.0"
+    "@earendil-works/pi-coding-agent": "^0.74.0"
   },
   "devDependencies": {
     "@types/bun": "latest",

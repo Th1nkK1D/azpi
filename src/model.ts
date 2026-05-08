@@ -1,7 +1,7 @@
 import { RequestError } from "@agentclientprotocol/sdk";
 import type { SessionModelState, SessionConfigOption } from "@agentclientprotocol/sdk";
-import type { Model } from "@mariozechner/pi-ai";
-import type { AgentSession, ModelRegistry } from "@mariozechner/pi-coding-agent";
+import type { Model } from "@earendil-works/pi-ai";
+import type { AgentSession, ModelRegistry } from "@earendil-works/pi-coding-agent";
 
 type SessionConfigWithOptions = SessionConfigOption & {
   options: { value: string; name: string }[];

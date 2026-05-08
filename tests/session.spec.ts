@@ -1,10 +1,10 @@
 import { describe, expect, it, mock, beforeEach } from "bun:test";
 import { SessionResolver, replaySessionHistory } from "../src/session";
-import { SessionManager } from "@mariozechner/pi-coding-agent";
-import type { AgentSession } from "@mariozechner/pi-coding-agent";
+import { SessionManager } from "@earendil-works/pi-coding-agent";
+import type { AgentSession } from "@earendil-works/pi-coding-agent";
 import type { AgentSideConnection } from "@agentclientprotocol/sdk";
 
-mock.module("@mariozechner/pi-coding-agent", () => ({
+mock.module("@earendil-works/pi-coding-agent", () => ({
   SessionManager: {
     list: mock(async () => []),
     listAll: mock(async () => []),
