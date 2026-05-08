@@ -261,7 +261,7 @@ export class PiAcpAgent implements Agent {
       }
     }
 
-    if (!session.sessionName && !matchCommand) {
+    if (!session.sessionName) {
       const name = deriveSessionName(prompt);
       if (name) {
         session.setSessionName(name);

@@ -2,7 +2,7 @@ import { RequestError } from "@agentclientprotocol/sdk";
 import type { ContentBlock } from "@agentclientprotocol/sdk";
 import type { Model, ImageContent } from "@mariozechner/pi-ai";
 
-const MAX_SESSION_NAME_LENGTH = 50;
+const MAX_SESSION_NAME_LENGTH = 60;
 
 /**
  * Converts ACP ContentBlock[] into text + images for Pi session.prompt().
@@ -86,7 +86,10 @@ function stripDataUri(data: string): string {
 
 /**
  * Derives a session name from the first line of a prompt text.
- * Returns undefined if the line is empty or starts with "/".
+ * Returns undefined if the line is empty.
+ * When the first line starts with "/", the slash command is stripped only
+ * for skill invocations (/skill:name) and prompt templates (/:name);
+ * all other slash commands return undefined.
  */
 export function deriveSessionName(content: ContentBlock[]): string | undefined {
   const cleanText = content
@@ -94,13 +97,35 @@ export function deriveSessionName(content: ContentBlock[]): string | undefined {
     .trim()
     .split("\n")[0];
 
-  if (!cleanText || cleanText.startsWith("/")) {
+  if (!cleanText) {
     return undefined;
   }
-  if (cleanText.length <= MAX_SESSION_NAME_LENGTH) {
-    return cleanText;
+
+  let name: string;
+  if (cleanText.startsWith("/")) {
+    const spaceIndex = cleanText.indexOf(" ");
+    const commandName = spaceIndex === -1 ? cleanText.slice(1) : cleanText.slice(1, spaceIndex);
+
+    // Only derive session name for skill and prompt template invocations.
+    if (!commandName.startsWith("skill:") && !commandName.startsWith(":")) {
+      return undefined;
+    }
+
+    if (spaceIndex === -1) {
+      return undefined;
+    }
+    name = cleanText.slice(spaceIndex + 1).trim();
+    if (!name) {
+      return undefined;
+    }
+  } else {
+    name = cleanText;
   }
-  return cleanText.slice(0, MAX_SESSION_NAME_LENGTH).trimEnd() + "...";
+
+  if (name.length <= MAX_SESSION_NAME_LENGTH) {
+    return name;
+  }
+  return name.slice(0, MAX_SESSION_NAME_LENGTH).trimEnd() + "...";
 }
 
 function getBlockText(block: ContentBlock): string {

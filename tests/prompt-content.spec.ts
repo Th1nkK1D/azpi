@@ -250,24 +250,27 @@ describe("deriveSessionName", () => {
     expect(deriveSessionName(createTextPrompt("Hello, how are you?"))).toBe("Hello, how are you?");
   });
 
-  it("truncates text longer than 50 characters", () => {
+  it("truncates text longer than 60 characters", () => {
     const longText = "a".repeat(100);
-    expect(deriveSessionName(createTextPrompt(longText))).toBe("a".repeat(50) + "...");
+    expect(deriveSessionName(createTextPrompt(longText))).toBe("a".repeat(60) + "...");
   });
 
   it("uses only the first line for session name", () => {
     expect(deriveSessionName(createTextPrompt("First line\nSecond line"))).toBe("First line");
   });
 
-  it("returns undefined for slash commands", () => {
+  it("returns undefined for non-skill/template slash commands", () => {
     expect(deriveSessionName(createTextPrompt("/unknown arg"))).toBeUndefined();
+    expect(deriveSessionName(createTextPrompt("/help me"))).toBeUndefined();
+    expect(deriveSessionName(createTextPrompt("/help"))).toBeUndefined();
   });
 
-  it("returns undefined for empty text", () => {
+  it("returns undefined for future extension commands with colons", () => {
+    expect(deriveSessionName(createTextPrompt("/guardrail:setting arg"))).toBeUndefined();
+  });
+
+  it("returns undefined for empty or whitespace-only text", () => {
     expect(deriveSessionName(createTextPrompt(""))).toBeUndefined();
-  });
-
-  it("returns undefined for whitespace-only text", () => {
     expect(deriveSessionName(createTextPrompt("   \n  "))).toBeUndefined();
   });
 
@@ -275,12 +278,20 @@ describe("deriveSessionName", () => {
     expect(deriveSessionName(createTextPrompt("  Hello world  "))).toBe("Hello world");
   });
 
-  it("returns undefined when first line after trimming starts with /", () => {
-    expect(deriveSessionName(createTextPrompt("/help me"))).toBeUndefined();
+  it("derives session name from skill invocation arguments", () => {
+    expect(deriveSessionName(createTextPrompt("/skill:review Fix this"))).toBe("Fix this");
+    expect(deriveSessionName(createTextPrompt("/skill:code-review-excellence Review the PR"))).toBe(
+      "Review the PR",
+    );
   });
 
-  it("returns text at 51 chars with ellipsis", () => {
-    expect(deriveSessionName(createTextPrompt("a".repeat(51)))).toBe("a".repeat(50) + "...");
+  it("derives session name from prompt template arguments", () => {
+    expect(deriveSessionName(createTextPrompt("/:code-review Look at this"))).toBe("Look at this");
+  });
+
+  it("returns undefined for skill invocation with no or whitespace arguments", () => {
+    expect(deriveSessionName(createTextPrompt("/skill:review"))).toBeUndefined();
+    expect(deriveSessionName(createTextPrompt("/skill:review   "))).toBeUndefined();
   });
 
   it("parsed content type with uri as filename", () => {
