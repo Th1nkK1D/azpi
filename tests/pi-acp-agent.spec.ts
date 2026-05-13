@@ -248,6 +248,9 @@ describe("PiAcpAgent", () => {
 
       await agent.newSession(newSessionReq());
 
+      // flush setImmediate so deferred notifications are sent
+      await new Promise((r) => setImmediate(r));
+
       const calls = conn.sessionUpdate.mock.calls as any[];
       const cmdUpdateCalls = calls.filter(
         (call) => call[0].update.sessionUpdate === "available_commands_update",
@@ -545,6 +548,9 @@ describe("PiAcpAgent", () => {
       });
 
       const newResult = await agent.newSession(newSessionReq());
+
+      // flush setImmediate so deferred notifications run before clearing
+      await new Promise((r) => setImmediate(r));
       conn.sessionUpdate.mockClear?.();
 
       const result = await agent.prompt(promptReq(newResult.sessionId, "/session"));
@@ -667,6 +673,9 @@ describe("PiAcpAgent", () => {
       });
 
       await agent.newSession(newSessionReq());
+
+      // flush setImmediate so deferred notifications don't race with mockClear
+      await new Promise((r) => setImmediate(r));
       conn.sessionUpdate.mockClear?.();
 
       const subscribers = (mockSession as any)._subscribers as Array<(event: any) => void>;
@@ -696,6 +705,9 @@ describe("PiAcpAgent", () => {
       });
 
       const newResult = await agent.newSession(newSessionReq());
+
+      // flush setImmediate so deferred notifications don't race with mockClear
+      await new Promise((r) => setImmediate(r));
       conn.sessionUpdate.mockClear?.();
 
       const subscribers = (mockSession as any)._subscribers as Array<(event: any) => void>;

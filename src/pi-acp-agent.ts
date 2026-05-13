@@ -73,6 +73,8 @@ export class PiAcpAgent implements Agent {
   private pendingPrompts = new Map<string, { resolve: (r: PromptResponse) => void }>();
   private abortControllers = new Map<string, AbortController>();
   private sessionResolver = new SessionResolver();
+  private commandsAdvertised = new Set<string>();
+  private startupMessageSent = new Set<string>();
 
   readonly options: PiAcpAgentOptions;
   readonly connection: AgentSideConnection;
@@ -132,17 +134,22 @@ export class PiAcpAgent implements Agent {
       await session.setModel(this.availableModels[0]!);
     }
 
-    this.safeNotify(() => this.discoverAndEmitCommands(sessionId));
-
-    this.safeNotify(() =>
-      this.connection.sessionUpdate({
-        sessionId,
-        update: {
-          content: { text: buildStartupMessage(session), type: "text" },
-          sessionUpdate: "agent_message_chunk",
-        },
-      }),
-    );
+    // Defer notifications until after response is flushed.
+    // ZED only registers the session after processing NewSessionResponse,
+    // so session/update notifications sent before the response are silently dropped.
+    setImmediate(() => {
+      this.safeNotify(() => this.discoverAndEmitCommands(sessionId));
+      this.safeNotify(() =>
+        this.connection.sessionUpdate({
+          sessionId,
+          update: {
+            content: { text: buildStartupMessage(session), type: "text" },
+            sessionUpdate: "agent_message_chunk",
+          },
+        }),
+      );
+      this.startupMessageSent.add(sessionId);
+    });
 
     return {
       sessionId,
@@ -236,6 +243,24 @@ export class PiAcpAgent implements Agent {
 
   async prompt({ sessionId, prompt }: PromptRequest): Promise<PromptResponse> {
     const session = this.getSessionOrThrow(sessionId);
+
+    // Fallback: re-send commands + startup message if the deferred send
+    // raced with a prompt and ZED hasn't received them yet.
+    if (!this.commandsAdvertised.has(sessionId)) {
+      this.safeNotify(() => this.discoverAndEmitCommands(sessionId));
+    }
+    if (!this.startupMessageSent.has(sessionId)) {
+      this.startupMessageSent.add(sessionId);
+      this.safeNotify(() =>
+        this.connection.sessionUpdate({
+          sessionId,
+          update: {
+            content: { text: buildStartupMessage(session), type: "text" },
+            sessionUpdate: "agent_message_chunk",
+          },
+        }),
+      );
+    }
 
     const { text, images } = convertPromptContent(prompt, session.model);
 
@@ -406,6 +431,8 @@ export class PiAcpAgent implements Agent {
     }
 
     this.sessionResolver.unregisterSession(sessionId);
+    this.commandsAdvertised.delete(sessionId);
+    this.startupMessageSent.delete(sessionId);
 
     const pending = this.pendingPrompts.get(sessionId);
     if (pending) {
@@ -467,6 +494,7 @@ export class PiAcpAgent implements Agent {
     };
 
     await this.connection.sessionUpdate(notification);
+    this.commandsAdvertised.add(sessionId);
   }
 
   private safeNotify(fn: () => Promise<void>): void {
