@@ -56,7 +56,7 @@ If you haven't set up the Pi coding agent before, please refer to the [Pi config
 ## Limitations / Future Improvements
 
 - **No interactive provider authentication** via the `/login` command; uses [API Keys](https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/providers.md#api-keys) instead.
-- **[MCP](https://agentclientprotocol.com/protocol/session-setup#mcp-servers) and [agent plans]**(https://agentclientprotocol.com/protocol/agent-plan) are conflicted with Pi's [philosophy](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent#philosophy) and are unlikely to be implemented.
-- **Interactive dialogs are not supported.** Pi's `/tree` and `/fork`, and extension commands calling ctx.ui `confirm()`, `select()`, `input()`, `editor()`, or `custom()` will throw an error. These require a TUI context that is not available in ACP mode.
-- **ACP elicitation** (`elicitation/create`) could bridge interactive dialogs in the future, but the protocol is still an RFD and not yet implemented.
+- **[MCP](https://agentclientprotocol.com/protocol/session-setup#mcp-servers) and [agent plans](https://agentclientprotocol.com/protocol/agent-plan)** are conflicted with Pi's [philosophy](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent#philosophy) and are unlikely to be implemented.
+- **Interactive dialogs are not supported.** Pi's `/tree`, `/fork`, and extension commands calling ctx.ui `confirm()`, `select()`, `input()`, `editor()`, or `custom()` use Pi native TUI rendering.
+   - **ACP elicitation** (`elicitation/create`) could bridge interactive dialogs in the future, but the protocol is still [an RFD](https://agentclientprotocol.com/rfds/elicitation) and not yet implemented.
 - **No published package** on NPM yet.
