@@ -224,8 +224,15 @@ export class PiAcpAgent implements Agent {
   }: SetSessionModelRequest): Promise<SetSessionModelResponse> {
     const session = this.getSessionOrThrow(sessionId);
     const model = resolveModelById(this.modelRegistry, modelId);
-    await session.setModel(model);
-    await this.sendConfigOptionsUpdate(sessionId);
+
+    try {
+      await session.setModel(model);
+      await this.sendConfigOptionsUpdate(sessionId);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.notifyError(sessionId, message);
+      throw error;
+    }
 
     return {};
   }
@@ -237,18 +244,27 @@ export class PiAcpAgent implements Agent {
   }: SetSessionConfigOptionRequest): Promise<SetSessionConfigOptionResponse> {
     const session = this.getSessionOrThrow(sessionId);
 
-    if (configId === "model") {
-      const model = resolveModelById(this.modelRegistry, value as string);
-      await session.setModel(model);
-    } else if (configId === "thinking-level") {
-      session.setThinkingLevel(value as AgentSession["thinkingLevel"]);
-    } else {
-      throw RequestError.invalidParams(`Unknown config option: ${configId}`);
-    }
+    try {
+      if (configId === "model") {
+        const model = resolveModelById(this.modelRegistry, value as string);
+        await session.setModel(model);
+      } else if (configId === "thinking-level") {
+        session.setThinkingLevel(value as AgentSession["thinkingLevel"]);
+      } else {
+        throw RequestError.invalidParams(`Unknown config option: ${configId}`);
+      }
 
-    return {
-      configOptions: this.buildConfigOptions(session),
-    };
+      return {
+        configOptions: this.buildConfigOptions(session),
+      };
+    } catch (error: unknown) {
+      if (error instanceof RequestError) {
+        throw error;
+      }
+      const message = error instanceof Error ? error.message : String(error);
+      this.notifyError(sessionId, message);
+      throw error;
+    }
   }
 
   async prompt({ sessionId, prompt }: PromptRequest): Promise<PromptResponse> {
@@ -278,21 +294,27 @@ export class PiAcpAgent implements Agent {
     if (matchCommand) {
       const builtin = findBuiltinCommand(matchCommand.name);
       if (builtin) {
-        const result = await builtin.execute(session, matchCommand.args);
+        try {
+          const result = await builtin.execute(session, matchCommand.args);
 
-        if (matchCommand.name === "reload") {
-          this.safeNotify(() => this.discoverAndEmitCommands(sessionId));
+          if (matchCommand.name === "reload") {
+            this.safeNotify(() => this.discoverAndEmitCommands(sessionId));
+          }
+
+          await this.connection.sessionUpdate({
+            sessionId,
+            update: {
+              content: { text: result, type: "text" },
+              sessionUpdate: "agent_message_chunk",
+            },
+          });
+
+          return { stopReason: "end_turn" };
+        } catch (error: unknown) {
+          const message = error instanceof Error ? error.message : String(error);
+          this.notifyError(sessionId, message);
+          return { stopReason: "end_turn" };
         }
-
-        await this.connection.sessionUpdate({
-          sessionId,
-          update: {
-            content: { text: result, type: "text" },
-            sessionUpdate: "agent_message_chunk",
-          },
-        });
-
-        return { stopReason: "end_turn" };
       }
 
       const extensionCmd = findExtensionCommand(session, matchCommand.name);
@@ -337,7 +359,9 @@ export class PiAcpAgent implements Agent {
       this.pendingPrompts.set(sessionId, { resolve });
     });
 
-    session.prompt(text, images.length > 0 ? { images } : undefined).catch((_error: Error) => {
+    session.prompt(text, images.length > 0 ? { images } : undefined).catch((error: unknown) => {
+      const message = error instanceof Error ? error.message : String(error);
+      this.notifyError(sessionId, message);
       const existing = this.pendingPrompts.get(sessionId);
       if (existing) {
         existing.resolve({ stopReason: "end_turn" });
@@ -536,6 +560,18 @@ export class PiAcpAgent implements Agent {
 
     await this.connection.sessionUpdate(notification);
     this.commandsAdvertised.add(sessionId);
+  }
+
+  private notifyError(sessionId: string, message: string): void {
+    this.safeNotify(() =>
+      this.connection.sessionUpdate({
+        sessionId,
+        update: {
+          content: { text: `❌ Error: ${message}`, type: "text" },
+          sessionUpdate: "agent_message_chunk",
+        },
+      }),
+    );
   }
 
   private safeNotify(fn: () => Promise<void>): void {

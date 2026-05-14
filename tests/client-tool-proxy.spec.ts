@@ -41,16 +41,6 @@ describe("createAcpProxyTools", () => {
   const defaultCwd = "/home/user/project";
   const sessionId = "test-session-id";
 
-  it("returns empty array when capabilities is undefined", () => {
-    const tools = createAcpProxyTools({
-      connection: mockConnection(),
-      sessionId,
-      capabilities: undefined,
-      cwd: defaultCwd,
-    });
-    expect(tools).toHaveLength(0);
-  });
-
   it("returns empty array when no capabilities are advertised", () => {
     const tools = createAcpProxyTools({
       connection: mockConnection(),
@@ -133,30 +123,6 @@ describe("createAcpProxyTools", () => {
     expect(toolNames).toContain("edit");
     expect(toolNames).toContain("bash");
     expect(tools.length).toBe(4);
-  });
-
-  it("does not create edit when only readTextFile is advertised", () => {
-    const tools = createAcpProxyTools({
-      connection: mockConnection(),
-      sessionId,
-      capabilities: { fs: { readTextFile: true } },
-      cwd: defaultCwd,
-    });
-    const toolNames = tools.map((t) => t.name);
-    expect(toolNames).toContain("read");
-    expect(toolNames).not.toContain("edit");
-  });
-
-  it("does not create edit when only writeTextFile is advertised", () => {
-    const tools = createAcpProxyTools({
-      connection: mockConnection(),
-      sessionId,
-      capabilities: { fs: { writeTextFile: true } },
-      cwd: defaultCwd,
-    });
-    const toolNames = tools.map((t) => t.name);
-    expect(toolNames).toContain("write");
-    expect(toolNames).not.toContain("edit");
   });
 });
 

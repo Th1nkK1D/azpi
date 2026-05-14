@@ -7,7 +7,6 @@ import type {
   PromptRequest,
 } from "@agentclientprotocol/sdk";
 import { PiAcpAgent } from "../src/pi-acp-agent";
-import { mapSessionEvent, mapStopReason } from "../src/event-bridge";
 import type { AgentSession } from "@earendil-works/pi-coding-agent";
 import type { Model } from "@earendil-works/pi-ai";
 
@@ -730,40 +729,330 @@ describe("PiAcpAgent", () => {
       expect(infoUpdateCalls[0][0].update.updatedAt).toBeDefined();
     });
   });
+
+  describe("cancel", () => {
+    it("does nothing when session not found", async () => {
+      const conn = createMockConnection();
+      const agent = new PiAcpAgent(conn, {
+        authStorage: createMockAuthStorage(),
+        modelRegistry: createMockRegistry([]) as any,
+      });
+
+      await expect(agent.cancel({ sessionId: "nonexistent" })).resolves.toBeUndefined();
+    });
+
+    it("does nothing when session exists but no pending prompt", async () => {
+      const mockSession = createMockSession();
+      const conn = createMockConnection();
+      const agent = new PiAcpAgent(conn, {
+        authStorage: createMockAuthStorage(),
+        modelRegistry: createMockRegistry([createMockModel()]) as any,
+        sessionFactory: async () => ({ session: mockSession }),
+      });
+
+      const newResult = await agent.newSession(newSessionReq());
+
+      await expect(agent.cancel({ sessionId: newResult.sessionId })).resolves.toBeUndefined();
+      expect(mockSession.abort).not.toHaveBeenCalled();
+    });
+
+    it("aborts session and resolves pending prompt with cancelled", async () => {
+      const mockSession = createMockSession();
+      const conn = createMockConnection();
+      const agent = new PiAcpAgent(conn, {
+        authStorage: createMockAuthStorage(),
+        modelRegistry: createMockRegistry([createMockModel()]) as any,
+        sessionFactory: async () => ({ session: mockSession }),
+      });
+
+      const newResult = await agent.newSession(newSessionReq());
+
+      // Start a prompt — session.prompt mock resolves immediately,
+      // but the pending promise only resolves via agent_end or cancel.
+      const promptPromise = agent.prompt(promptReq(newResult.sessionId, "test"));
+
+      // Let the microtask queue flush so pendingPrompts is set
+      await new Promise((r) => setTimeout(r, 5));
+
+      await agent.cancel({ sessionId: newResult.sessionId });
+
+      const result = await promptPromise;
+      expect(result.stopReason).toBe("cancelled");
+      expect(mockSession.abort).toHaveBeenCalled();
+    });
+  });
+
+  describe("closeSession", () => {
+    it("calls dispose and abort on the session", async () => {
+      const mockSession = createMockSession();
+      const conn = createMockConnection();
+      const agent = new PiAcpAgent(conn, {
+        authStorage: createMockAuthStorage(),
+        modelRegistry: createMockRegistry([createMockModel()]) as any,
+        sessionFactory: async () => ({ session: mockSession }),
+      });
+
+      const newResult = await agent.newSession(newSessionReq());
+      await agent.closeSession({ sessionId: newResult.sessionId });
+
+      expect(mockSession.abort).toHaveBeenCalled();
+      expect(mockSession.dispose).toHaveBeenCalled();
+    });
+
+    it("does not throw when session not found", async () => {
+      const conn = createMockConnection();
+      const agent = new PiAcpAgent(conn, {
+        authStorage: createMockAuthStorage(),
+        modelRegistry: createMockRegistry([]) as any,
+      });
+
+      await expect(agent.closeSession({ sessionId: "nonexistent" })).resolves.toBeUndefined();
+    });
+
+    it("calls dispose even when abort throws", async () => {
+      const mockSession = createMockSession({
+        abort: mock(async () => {
+          throw new Error("already aborted");
+        }),
+      });
+      const conn = createMockConnection();
+      const agent = new PiAcpAgent(conn, {
+        authStorage: createMockAuthStorage(),
+        modelRegistry: createMockRegistry([createMockModel()]) as any,
+        sessionFactory: async () => ({ session: mockSession }),
+      });
+
+      const newResult = await agent.newSession(newSessionReq());
+      await agent.closeSession({ sessionId: newResult.sessionId });
+
+      expect(mockSession.abort).toHaveBeenCalled();
+      expect(mockSession.dispose).toHaveBeenCalled();
+    });
+  });
+
+  describe("close", () => {
+    it("cleans up all sessions", async () => {
+      const mockSession1 = createMockSession({ sessionId: "s1" });
+      const mockSession2 = createMockSession({ sessionId: "s2" });
+      let callCount = 0;
+      const conn = createMockConnection();
+      const agent = new PiAcpAgent(conn, {
+        authStorage: createMockAuthStorage(),
+        modelRegistry: createMockRegistry([createMockModel()]) as any,
+        sessionFactory: async () => {
+          const s = callCount === 0 ? mockSession1 : mockSession2;
+          callCount++;
+          return { session: s };
+        },
+      });
+
+      await agent.newSession(newSessionReq());
+      await agent.newSession(newSessionReq());
+
+      await agent.close();
+
+      expect(mockSession1.dispose).toHaveBeenCalled();
+      expect(mockSession2.dispose).toHaveBeenCalled();
+    });
+
+    it("does not throw when no sessions exist", async () => {
+      const conn = createMockConnection();
+      const agent = new PiAcpAgent(conn, {
+        authStorage: createMockAuthStorage(),
+        modelRegistry: createMockRegistry([]) as any,
+      });
+
+      await expect(agent.close()).resolves.toBeUndefined();
+    });
+  });
 });
 
-describe("mapStopReason", () => {
-  it("maps aborted to cancelled", () => {
-    expect(mapStopReason({ stopReason: "aborted" })).toBe("cancelled");
+describe("error handling", () => {
+  it("sends error message and resolves with error stopReason when session.prompt rejects", async () => {
+    const models = [createMockModel()];
+    const mockSession = createMockSession({
+      model: models[0],
+      prompt: mock(async () => {
+        throw new Error("API rate limit exceeded");
+      }),
+    });
+    const conn = createMockConnection();
+    const agent = new PiAcpAgent(conn, {
+      authStorage: createMockAuthStorage(),
+      modelRegistry: createMockRegistry(models) as any,
+      sessionFactory: async () => ({ session: mockSession }),
+    });
+
+    const newResult = await agent.newSession(newSessionReq());
+    await new Promise((r) => setImmediate(r));
+    conn.sessionUpdate.mockClear?.();
+
+    const result = await agent.prompt(promptReq(newResult.sessionId, "test"));
+
+    expect(result.stopReason).toBe("end_turn");
+
+    const calls = conn.sessionUpdate.mock.calls as any[];
+    const msgCalls = calls.filter((call) => call[0].update.sessionUpdate === "agent_message_chunk");
+    expect(msgCalls.length).toBe(1);
+    expect(msgCalls[0][0].update.content.text).toBe("❌ Error: API rate limit exceeded");
   });
 
-  it("maps end_turn to end_turn", () => {
-    expect(mapStopReason({ stopReason: "end_turn" })).toBe("end_turn");
+  it("sends error message for slash command execution failures", async () => {
+    const models = [createMockModel()];
+    const mockSession = createMockSession({
+      model: models[0],
+      compact: mock(async () => {
+        throw new Error("Compaction failed: session locked");
+      }),
+      abort: mock(async () => {}),
+    });
+    const conn = createMockConnection();
+    const agent = new PiAcpAgent(conn, {
+      authStorage: createMockAuthStorage(),
+      modelRegistry: createMockRegistry(models) as any,
+      sessionFactory: async () => ({ session: mockSession }),
+    });
+
+    const newResult = await agent.newSession(newSessionReq());
+    await new Promise((r) => setImmediate(r));
+    conn.sessionUpdate.mockClear?.();
+
+    const result = await agent.prompt(promptReq(newResult.sessionId, "/compact"));
+
+    expect(result.stopReason).toBe("end_turn");
+
+    const calls = conn.sessionUpdate.mock.calls as any[];
+    const msgCalls = calls.filter((call) => call[0].update.sessionUpdate === "agent_message_chunk");
+    expect(msgCalls.length).toBe(1);
+    expect(msgCalls[0][0].update.content.text).toBe("❌ Error: Compaction failed: session locked");
   });
 
-  it("maps error to end_turn", () => {
-    expect(mapStopReason({ stopReason: "error" })).toBe("end_turn");
-  });
-});
+  it("catches non-string error objects and sends fallback message", async () => {
+    const models = [createMockModel()];
+    const mockSession = createMockSession({
+      model: models[0],
+      prompt: mock(async () => {
+        throw { code: 500 };
+      }),
+    });
+    const conn = createMockConnection();
+    const agent = new PiAcpAgent(conn, {
+      authStorage: createMockAuthStorage(),
+      modelRegistry: createMockRegistry(models) as any,
+      sessionFactory: async () => ({ session: mockSession }),
+    });
 
-describe("mapSessionEvent", () => {
-  it("returns null for agent_end (handled separately)", () => {
-    const result = mapSessionEvent({ messages: [], type: "agent_end" }, "sid");
-    expect(result).toBeNull();
+    const newResult = await agent.newSession(newSessionReq());
+    await new Promise((r) => setImmediate(r));
+    conn.sessionUpdate.mockClear?.();
+
+    const result = await agent.prompt(promptReq(newResult.sessionId, "test"));
+
+    expect(result.stopReason).toBe("end_turn");
+
+    const calls = conn.sessionUpdate.mock.calls as any[];
+    const msgCalls = calls.filter((call) => call[0].update.sessionUpdate === "agent_message_chunk");
+    expect(msgCalls.length).toBe(1);
+    expect(msgCalls[0][0].update.content.text).toBe("❌ Error: [object Object]");
   });
 
-  it("emits tool_call for tool_execution_start", () => {
-    const result = mapSessionEvent(
-      {
-        args: { path: "test.txt" },
-        toolCallId: "1",
-        toolName: "read",
-        type: "tool_execution_start",
-      },
-      "sid",
+  it("unstable_setSessionModel sends error message and rethrows on setModel failure", async () => {
+    const models = [
+      createMockModel({ provider: "openai", id: "gpt-4", name: "GPT-4" }),
+      createMockModel({ provider: "anthropic", id: "claude-3", name: "Claude 3" }),
+    ];
+    const mockSession = createMockSession({
+      model: models[0],
+      setModel: mock(async () => {
+        throw new Error("Model API key invalid");
+      }),
+    });
+    const conn = createMockConnection();
+    const agent = new PiAcpAgent(conn, {
+      authStorage: createMockAuthStorage(),
+      modelRegistry: createMockRegistry(models) as any,
+      sessionFactory: async () => ({ session: mockSession }),
+    });
+
+    const newResult = await agent.newSession(newSessionReq());
+    await new Promise((r) => setImmediate(r));
+    conn.sessionUpdate.mockClear?.();
+
+    await expect(
+      agent.unstable_setSessionModel({
+        sessionId: newResult.sessionId,
+        modelId: "anthropic/claude-3",
+      }),
+    ).rejects.toThrow("Model API key invalid");
+
+    const calls = conn.sessionUpdate.mock.calls as any[];
+    const msgCalls = calls.filter((call) => call[0].update.sessionUpdate === "agent_message_chunk");
+    expect(msgCalls.length).toBe(1);
+    expect(msgCalls[0][0].update.content.text).toBe("❌ Error: Model API key invalid");
+  });
+
+  it("setSessionConfigOption sends error message for runtime failures", async () => {
+    const models = [createMockModel()];
+    const mockSession = createMockSession({
+      model: models[0],
+      setModel: mock(async () => {
+        throw new Error("Network timeout");
+      }),
+    });
+    const conn = createMockConnection();
+    const agent = new PiAcpAgent(conn, {
+      authStorage: createMockAuthStorage(),
+      modelRegistry: createMockRegistry(models) as any,
+      sessionFactory: async () => ({ session: mockSession }),
+    });
+
+    const newResult = await agent.newSession(newSessionReq());
+    await new Promise((r) => setImmediate(r));
+    conn.sessionUpdate.mockClear?.();
+
+    await expect(
+      agent.setSessionConfigOption({
+        sessionId: newResult.sessionId,
+        configId: "model",
+        value: "openai/test-model",
+      }),
+    ).rejects.toThrow("Network timeout");
+
+    const calls = conn.sessionUpdate.mock.calls as any[];
+    const msgCalls = calls.filter((call) => call[0].update.sessionUpdate === "agent_message_chunk");
+    expect(msgCalls.length).toBe(1);
+    expect(msgCalls[0][0].update.content.text).toBe("❌ Error: Network timeout");
+  });
+
+  it("setSessionConfigOption rethrows RequestError without double-notifying", async () => {
+    const models = [createMockModel()];
+    const mockSession = createMockSession({ model: models[0] });
+    const conn = createMockConnection();
+    const agent = new PiAcpAgent(conn, {
+      authStorage: createMockAuthStorage(),
+      modelRegistry: createMockRegistry(models) as any,
+      sessionFactory: async () => ({ session: mockSession }),
+    });
+
+    const newResult = await agent.newSession(newSessionReq());
+    await new Promise((r) => setImmediate(r));
+    conn.sessionUpdate.mockClear?.();
+
+    await expect(
+      agent.setSessionConfigOption({
+        sessionId: newResult.sessionId,
+        configId: "unknown-option",
+        value: "whatever",
+      }),
+    ).rejects.toBeInstanceOf(RequestError);
+
+    // No agent_message_chunk should be sent for RequestError
+    const calls = conn.sessionUpdate.mock.calls as any[];
+    const msgCalls = calls.filter(
+      (call) =>
+        call[0].update.sessionUpdate === "agent_message_chunk" &&
+        (call[0].update.content.text as string).startsWith("❌ Error:"),
     );
-    expect(result).not.toBeNull();
-    expect(result!.update.sessionUpdate).toBe("tool_call");
-    expect((result!.update as any).toolCallId).toBe("1");
+    expect(msgCalls.length).toBe(0);
   });
 });
