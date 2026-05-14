@@ -1,7 +1,8 @@
-import type { AgentSession } from "@earendil-works/pi-coding-agent";
+import type { AgentSession, ResolvedCommand } from "@earendil-works/pi-coding-agent";
 import type { AvailableCommand } from "@agentclientprotocol/sdk";
 
 const HINT_PLACEHOLDER = "Arguments for the command";
+const ALLOW_ALL = "*";
 
 interface SlashCommandMatch {
   name: string;
@@ -16,8 +17,52 @@ interface BuiltinCommand {
 }
 
 /**
+ * Parse the AZPI_ALLOW_EXTENSION_COMMANDS environment variable.
+ * Returns a Set of allowed extension command names, or null if all commands are allowed.
+ *
+ * Format: comma-separated command names, e.g. "deploy,pirate,compress-stats"
+ * Wildcard "*" means allow all commands.
+ * Empty or unset means allow none.
+ */
+export function parseExtensionWhitelist(): Set<string> | null {
+  const raw = (process.env.AZPI_ALLOW_EXTENSION_COMMANDS ?? "").trim();
+
+  if (!raw) {
+    return new Set();
+  }
+
+  if (raw === ALLOW_ALL) {
+    return null;
+  }
+
+  const names = raw
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+
+  return new Set(names);
+}
+
+/**
+ * Check whether an extension command is allowed by the whitelist.
+ * @param commandName - The command name (without leading slash).
+ * @param whitelist - Parsed whitelist from parseExtensionWhitelist().
+ *                    null = allow all, empty Set = allow none.
+ */
+export function isExtensionCommandAllowed(
+  commandName: string,
+  whitelist: Set<string> | null,
+): boolean {
+  if (whitelist === null) {
+    return true;
+  }
+  return whitelist.has(commandName);
+}
+
+/**
  * Discover all available slash commands as ACP AvailableCommand[] from:
  * - Built-in commands (our subset)
+ * - Extension commands (via extension runner, filtered by whitelist)
  * - Skills loaded by the session (via resource loader)
  * - Prompt templates
  */
@@ -69,7 +114,48 @@ export function discoverCommands(session: AgentSession): AvailableCommand[] {
     }
   }
 
+  const extensionRunner = session.extensionRunner;
+  if (extensionRunner && typeof extensionRunner.getRegisteredCommands === "function") {
+    try {
+      const registeredCommands = extensionRunner.getRegisteredCommands();
+      if (Array.isArray(registeredCommands)) {
+        const whitelist = parseExtensionWhitelist();
+        for (const cmd of registeredCommands) {
+          if (!isExtensionCommandAllowed(cmd.name, whitelist)) {
+            continue;
+          }
+          commands.push({
+            name: cmd.invocationName,
+            description: cmd.description || `Extension command: ${cmd.name}`,
+            input: { hint: HINT_PLACEHOLDER },
+          });
+        }
+      }
+    } catch {
+      // Ignore errors during extension command discovery
+    }
+  }
+
   return commands.toSorted((a, z) => a.name.localeCompare(z.name));
+}
+
+/**
+ * Look up an extension command by its registered name (without suffix).
+ * Returns the ResolvedCommand if found, or undefined.
+ */
+export function findExtensionCommand(
+  session: AgentSession,
+  name: string,
+): ResolvedCommand | undefined {
+  const extensionRunner = session.extensionRunner;
+  if (!extensionRunner || typeof extensionRunner.getCommand !== "function") {
+    return undefined;
+  }
+  try {
+    return extensionRunner.getCommand(name);
+  } catch {
+    return undefined;
+  }
 }
 
 /**

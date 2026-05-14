@@ -4,6 +4,9 @@ import {
   builtinCommands,
   findBuiltinCommand,
   discoverCommands,
+  parseExtensionWhitelist,
+  isExtensionCommandAllowed,
+  findExtensionCommand,
 } from "../src/slash-commands";
 import type { AgentSession } from "@earendil-works/pi-coding-agent";
 import type { Model } from "@earendil-works/pi-ai";
@@ -409,5 +412,287 @@ describe("discoverCommands", () => {
     };
     const session = createMockSession({ resourceLoader: errorLoader });
     expect(() => discoverCommands(session)).not.toThrow();
+  });
+
+  it("discovers extension commands from extension runner", () => {
+    const mockRunner = {
+      getRegisteredCommands: () => [
+        {
+          name: "deploy",
+          invocationName: "deploy",
+          description: "Deploy the app",
+          sourceInfo: { path: "d.ts", source: "ext", scope: "user", origin: "top-level" },
+          handler: async () => {},
+        },
+        {
+          name: "pirate",
+          invocationName: "pirate",
+          description: "Talk like a pirate",
+          sourceInfo: { path: "p.ts", source: "ext", scope: "user", origin: "top-level" },
+          handler: async () => {},
+        },
+      ],
+    } as any;
+    const session = createMockSession({ extensionRunner: mockRunner });
+
+    // Set env to allow all
+    const prevEnv = process.env.AZPI_ALLOW_EXTENSION_COMMANDS;
+    process.env.AZPI_ALLOW_EXTENSION_COMMANDS = "*";
+    try {
+      const commands = discoverCommands(session);
+      const deployCmd = commands.find((c) => c.name === "deploy");
+      const pirateCmd = commands.find((c) => c.name === "pirate");
+      expect(deployCmd).toBeDefined();
+      expect(deployCmd!.description).toBe("Deploy the app");
+      expect(pirateCmd).toBeDefined();
+    } finally {
+      if (prevEnv !== undefined) {
+        process.env.AZPI_ALLOW_EXTENSION_COMMANDS = prevEnv;
+      } else {
+        delete process.env.AZPI_ALLOW_EXTENSION_COMMANDS;
+      }
+    }
+  });
+
+  it("filters extension commands by whitelist", () => {
+    const mockRunner = {
+      getRegisteredCommands: () => [
+        {
+          name: "deploy",
+          invocationName: "deploy",
+          description: "Deploy",
+          sourceInfo: { path: "d.ts", source: "ext", scope: "user", origin: "top-level" },
+          handler: async () => {},
+        },
+        {
+          name: "pirate",
+          invocationName: "pirate",
+          description: "Pirate",
+          sourceInfo: { path: "p.ts", source: "ext", scope: "user", origin: "top-level" },
+          handler: async () => {},
+        },
+      ],
+    } as any;
+    const session = createMockSession({ extensionRunner: mockRunner });
+
+    const prevEnv = process.env.AZPI_ALLOW_EXTENSION_COMMANDS;
+    process.env.AZPI_ALLOW_EXTENSION_COMMANDS = "deploy";
+    try {
+      const commands = discoverCommands(session);
+      expect(commands.find((c) => c.name === "deploy")).toBeDefined();
+      expect(commands.find((c) => c.name === "pirate")).toBeUndefined();
+    } finally {
+      if (prevEnv !== undefined) {
+        process.env.AZPI_ALLOW_EXTENSION_COMMANDS = prevEnv;
+      } else {
+        delete process.env.AZPI_ALLOW_EXTENSION_COMMANDS;
+      }
+    }
+  });
+
+  it("returns empty extension commands when whitelist is empty", () => {
+    const mockRunner = {
+      getRegisteredCommands: () => [
+        {
+          name: "deploy",
+          invocationName: "deploy",
+          description: "Deploy",
+          sourceInfo: { path: "d.ts", source: "ext", scope: "user", origin: "top-level" },
+          handler: async () => {},
+        },
+      ],
+    } as any;
+    const session = createMockSession({ extensionRunner: mockRunner });
+
+    const prevEnv = process.env.AZPI_ALLOW_EXTENSION_COMMANDS;
+    process.env.AZPI_ALLOW_EXTENSION_COMMANDS = "";
+    try {
+      const commands = discoverCommands(session);
+      expect(commands.find((c) => c.name === "deploy")).toBeUndefined();
+    } finally {
+      if (prevEnv !== undefined) {
+        process.env.AZPI_ALLOW_EXTENSION_COMMANDS = prevEnv;
+      } else {
+        delete process.env.AZPI_ALLOW_EXTENSION_COMMANDS;
+      }
+    }
+  });
+
+  it("handles extension runner errors gracefully", () => {
+    const mockRunner = {
+      getRegisteredCommands: () => {
+        throw new Error("runner not ready");
+      },
+    } as any;
+    const session = createMockSession({ extensionRunner: mockRunner });
+
+    const prevEnv = process.env.AZPI_ALLOW_EXTENSION_COMMANDS;
+    process.env.AZPI_ALLOW_EXTENSION_COMMANDS = "*";
+    try {
+      expect(() => discoverCommands(session)).not.toThrow();
+    } finally {
+      if (prevEnv !== undefined) {
+        process.env.AZPI_ALLOW_EXTENSION_COMMANDS = prevEnv;
+      } else {
+        delete process.env.AZPI_ALLOW_EXTENSION_COMMANDS;
+      }
+    }
+  });
+
+  it("skips extension discovery when extensionRunner is undefined", () => {
+    const session = createMockSession({ extensionRunner: undefined });
+    const commands = discoverCommands(session);
+    // Should still have built-in commands
+    expect(commands.find((c) => c.name === "name")).toBeDefined();
+  });
+});
+
+describe("parseExtensionWhitelist", () => {
+  it("returns empty Set for empty string", () => {
+    const prevEnv = process.env.AZPI_ALLOW_EXTENSION_COMMANDS;
+    process.env.AZPI_ALLOW_EXTENSION_COMMANDS = "";
+    try {
+      const result = parseExtensionWhitelist();
+      expect(result).not.toBeNull();
+      expect(result!.size).toBe(0);
+    } finally {
+      if (prevEnv !== undefined) {
+        process.env.AZPI_ALLOW_EXTENSION_COMMANDS = prevEnv;
+      } else {
+        delete process.env.AZPI_ALLOW_EXTENSION_COMMANDS;
+      }
+    }
+  });
+
+  it("returns null for wildcard *", () => {
+    const prevEnv = process.env.AZPI_ALLOW_EXTENSION_COMMANDS;
+    process.env.AZPI_ALLOW_EXTENSION_COMMANDS = "*";
+    try {
+      expect(parseExtensionWhitelist()).toBeNull();
+    } finally {
+      if (prevEnv !== undefined) {
+        process.env.AZPI_ALLOW_EXTENSION_COMMANDS = prevEnv;
+      } else {
+        delete process.env.AZPI_ALLOW_EXTENSION_COMMANDS;
+      }
+    }
+  });
+
+  it("returns null for wildcard with whitespace", () => {
+    const prevEnv = process.env.AZPI_ALLOW_EXTENSION_COMMANDS;
+    process.env.AZPI_ALLOW_EXTENSION_COMMANDS = "  *  ";
+    try {
+      expect(parseExtensionWhitelist()).toBeNull();
+    } finally {
+      if (prevEnv !== undefined) {
+        process.env.AZPI_ALLOW_EXTENSION_COMMANDS = prevEnv;
+      } else {
+        delete process.env.AZPI_ALLOW_EXTENSION_COMMANDS;
+      }
+    }
+  });
+
+  it("parses comma-separated names", () => {
+    const prevEnv = process.env.AZPI_ALLOW_EXTENSION_COMMANDS;
+    process.env.AZPI_ALLOW_EXTENSION_COMMANDS = "deploy,pirate,stats";
+    try {
+      const result = parseExtensionWhitelist();
+      expect(result).not.toBeNull();
+      expect(result!.has("deploy")).toBe(true);
+      expect(result!.has("pirate")).toBe(true);
+      expect(result!.has("stats")).toBe(true);
+      expect(result!.has("unknown")).toBe(false);
+    } finally {
+      if (prevEnv !== undefined) {
+        process.env.AZPI_ALLOW_EXTENSION_COMMANDS = prevEnv;
+      } else {
+        delete process.env.AZPI_ALLOW_EXTENSION_COMMANDS;
+      }
+    }
+  });
+
+  it("trims whitespace around names", () => {
+    const prevEnv = process.env.AZPI_ALLOW_EXTENSION_COMMANDS;
+    process.env.AZPI_ALLOW_EXTENSION_COMMANDS = " deploy ,  pirate  ";
+    try {
+      const result = parseExtensionWhitelist();
+      expect(result).not.toBeNull();
+      expect(result!.has("deploy")).toBe(true);
+      expect(result!.has("pirate")).toBe(true);
+    } finally {
+      if (prevEnv !== undefined) {
+        process.env.AZPI_ALLOW_EXTENSION_COMMANDS = prevEnv;
+      } else {
+        delete process.env.AZPI_ALLOW_EXTENSION_COMMANDS;
+      }
+    }
+  });
+
+  it("returns empty Set when env var is unset", () => {
+    const prevEnv = process.env.AZPI_ALLOW_EXTENSION_COMMANDS;
+    delete process.env.AZPI_ALLOW_EXTENSION_COMMANDS;
+    try {
+      const result = parseExtensionWhitelist();
+      expect(result).not.toBeNull();
+      expect(result!.size).toBe(0);
+    } finally {
+      if (prevEnv !== undefined) {
+        process.env.AZPI_ALLOW_EXTENSION_COMMANDS = prevEnv;
+      }
+    }
+  });
+});
+
+describe("isExtensionCommandAllowed", () => {
+  it("allows any command when whitelist is null", () => {
+    expect(isExtensionCommandAllowed("anything", null)).toBe(true);
+  });
+
+  it("allows command when in whitelist", () => {
+    const whitelist = new Set(["deploy", "pirate"]);
+    expect(isExtensionCommandAllowed("deploy", whitelist)).toBe(true);
+  });
+
+  it("denies command when not in whitelist", () => {
+    const whitelist = new Set(["deploy"]);
+    expect(isExtensionCommandAllowed("pirate", whitelist)).toBe(false);
+  });
+
+  it("denies command when whitelist is empty", () => {
+    const whitelist = new Set<string>();
+    expect(isExtensionCommandAllowed("deploy", whitelist)).toBe(false);
+  });
+});
+
+describe("findExtensionCommand", () => {
+  it("finds command by name", () => {
+    const mockCmd = {
+      name: "deploy",
+      invocationName: "deploy",
+      description: "Deploy",
+      sourceInfo: {
+        path: "deploy.ts",
+        source: "extension",
+        scope: "user" as const,
+        origin: "top-level" as const,
+      },
+      handler: async () => {},
+    };
+    const mockRunner = {
+      getCommand: (name: string) => (name === "deploy" ? mockCmd : undefined),
+    } as any;
+    const session = createMockSession({ extensionRunner: mockRunner });
+    expect(findExtensionCommand(session, "deploy")).toBe(mockCmd);
+    expect(findExtensionCommand(session, "unknown")).toBeUndefined();
+  });
+
+  it("returns undefined when extensionRunner is undefined", () => {
+    const session = createMockSession({ extensionRunner: undefined });
+    expect(findExtensionCommand(session, "deploy")).toBeUndefined();
+  });
+
+  it("returns undefined when getCommand is not a function", () => {
+    const session = createMockSession({ extensionRunner: {} as any });
+    expect(findExtensionCommand(session, "deploy")).toBeUndefined();
   });
 });

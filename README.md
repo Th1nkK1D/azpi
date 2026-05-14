@@ -19,7 +19,7 @@ Pi does not support ACP out of the box. While there are a few ACP adapters that 
 - **Real-time event streaming** — Bridges text, thinking, tool execution, and session info changes directly to ACP.
 - **Auto session naming** — Automatically derives session names from the initial prompt.
 - **Client tool proxy** — Delegates `read`, `write`, `edit`, and `bash` to the ACP client when available, enabling editors like Zed to display agent change diffs.
-- **Slash commands** — Supports Pi's built-in commands (`/name`, `/session`, `/compact`, `/export`, and `/reload`), skills, and prompt templates.
+- **Slash commands** — Supports Pi's built-in commands (`/name`, `/session`, `/compact`, `/export`, and `/reload`), skills, prompt templates, and extension commands (opt-in via `AZPI_ALLOW_EXTENSION_COMMANDS`, disabled by default).
 
 ## Usage
 
@@ -40,6 +40,9 @@ The binary will be available at `dist/azpi`. Here is an example configuration fo
     "type": "custom",
     "command": "<path-to-repository>/dist/azpi",
     "env": {
+      // Extension commands exposed to ACP clients (disabled by default)
+      // Set to `*` to allow all extension commands
+      "AZPI_ALLOW_EXTENSION_COMMANDS": "deploy,compress-stats",
       // Set to "true" to handle package installation via CLI
       // rather than automatically through the SDK
       "PI_OFFLINE": "true"
@@ -52,8 +55,8 @@ If you haven't set up the Pi coding agent before, please refer to the [Pi config
 
 ## Limitations / Future Improvements
 
-- No interactive provider authentication via the `/login` command; uses [API Keys](https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/providers.md#api-keys) instead.
-- [MCP](https://agentclientprotocol.com/protocol/session-setup#mcp-servers) and [agent plans](https://agentclientprotocol.com/protocol/agent-plan) conflict with Pi's [philosophy](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent#philosophy) and are unlikely to be implemented.
-- Currently does not support Pi's `/tree` and `/fork` commands.
-- Slash commands from Pi's [extensions](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent#extensions) are not yet supported, as some commands rely on TUI-specific rendering.
-- No published package on NPM yet.
+- **No interactive provider authentication** via the `/login` command; uses [API Keys](https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/providers.md#api-keys) instead.
+- **[MCP](https://agentclientprotocol.com/protocol/session-setup#mcp-servers) and [agent plans]**(https://agentclientprotocol.com/protocol/agent-plan) are conflicted with Pi's [philosophy](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent#philosophy) and are unlikely to be implemented.
+- **Interactive dialogs are not supported.** Pi's `/tree` and `/fork`, and extension commands calling ctx.ui `confirm()`, `select()`, `input()`, `editor()`, or `custom()` will throw an error. These require a TUI context that is not available in ACP mode.
+- **ACP elicitation** (`elicitation/create`) could bridge interactive dialogs in the future, but the protocol is still an RFD and not yet implemented.
+- **No published package** on NPM yet.

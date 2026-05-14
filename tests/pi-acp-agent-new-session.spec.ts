@@ -38,6 +38,7 @@ mock.module("@earendil-works/pi-coding-agent", () => ({
         prompt: mock(async () => {}),
         abort: mock(async () => {}),
         dispose: mock(() => {}),
+        bindExtensions: mock(async () => {}),
         resourceLoader: {
           getAgentsFiles: () => ({ agentsFiles: [] }),
           getSkills: () => ({ skills: [], diagnostics: [] }),

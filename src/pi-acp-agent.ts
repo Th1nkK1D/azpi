@@ -49,8 +49,16 @@ import {
 } from "./model";
 import { buildStartupMessage } from "./startup-message";
 import { name as AGENT_NAME, version as AGENT_VERSION } from "../package.json";
-import { findBuiltinCommand, parseSlashCommand, discoverCommands } from "./slash-commands";
+import {
+  findBuiltinCommand,
+  parseSlashCommand,
+  discoverCommands,
+  findExtensionCommand,
+  isExtensionCommandAllowed,
+  parseExtensionWhitelist,
+} from "./slash-commands";
 import { SessionResolver, replaySessionHistory } from "./session";
+import { createAcpUiBridge } from "./extension-ui-bridge";
 
 export interface PiAcpAgentOptions {
   /** Optional createAgentSession overrides (model, tools, etc.) */
@@ -80,6 +88,7 @@ export class PiAcpAgent implements Agent {
   readonly connection: AgentSideConnection;
   readonly authStorage: AuthStorage;
   readonly modelRegistry: ModelRegistry;
+  readonly extensionWhitelist: Set<string> | null;
   private clientCapabilities?: ClientCapabilities;
 
   readonly availableModels: Model<any>[];
@@ -90,6 +99,7 @@ export class PiAcpAgent implements Agent {
     this.authStorage = options?.authStorage ?? AuthStorage.create();
     this.modelRegistry = options?.modelRegistry ?? ModelRegistry.create(this.authStorage);
     this.availableModels = this.modelRegistry.getAvailable();
+    this.extensionWhitelist = parseExtensionWhitelist();
   }
 
   async initialize({ clientCapabilities }: InitializeRequest): Promise<InitializeResponse> {
@@ -284,6 +294,33 @@ export class PiAcpAgent implements Agent {
 
         return { stopReason: "end_turn" };
       }
+
+      const extensionCmd = findExtensionCommand(session, matchCommand.name);
+      if (extensionCmd) {
+        if (!isExtensionCommandAllowed(matchCommand.name, this.extensionWhitelist)) {
+          await this.connection.sessionUpdate({
+            sessionId,
+            update: {
+              content: {
+                text:
+                  `Command "/${matchCommand.name}" is not allowed. ` +
+                  `Set AZPI_ALLOW_EXTENSION_COMMANDS to whitelist it.`,
+                type: "text",
+              },
+              sessionUpdate: "agent_message_chunk",
+            },
+          });
+
+          return { stopReason: "end_turn" };
+        }
+
+        // Extension commands bypass the agent loop (no agent_start/agent_end).
+        // Pass to Pi which routes to the handler. Output flows via
+        // the notify() bridge (agent_message_chunk) and/or pi.sendMessage().
+        await session.prompt(text, images.length > 0 ? { images } : undefined);
+
+        return { stopReason: "end_turn" };
+      }
     }
 
     if (!session.sessionName) {
@@ -394,6 +431,10 @@ export class PiAcpAgent implements Agent {
       authStorage: this.authStorage,
       modelRegistry: this.modelRegistry,
       ...this.options.sessionOptions,
+    });
+
+    await session.bindExtensions({
+      uiContext: createAcpUiBridge(this.connection, resolvedSessionId),
     });
 
     this.registerSession(resolvedSessionId, session);
