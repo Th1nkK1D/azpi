@@ -91,9 +91,17 @@ describe("createAcpUiBridge", () => {
   });
 
   describe("theme", () => {
-    it("throws descriptive error", () => {
+    it("returns a passthrough theme that does not apply ANSI formatting", () => {
       const bridge = createAcpUiBridge(createMockConnection(), sessionId);
-      expect(() => bridge.theme).toThrow("Theme is not available in ACP mode");
+      const theme = bridge.theme;
+      expect(theme.name).toBe("acp-passthrough");
+      expect(theme.fg("text", "hello")).toBe("hello");
+      expect(theme.bg("selectedBg", "hello")).toBe("hello");
+      expect(theme.bold("hello")).toBe("hello");
+      expect(theme.getFgAnsi("text")).toBe("");
+      expect(theme.getColorMode()).toBe("truecolor");
+      const borderFn = theme.getThinkingBorderColor("off");
+      expect(borderFn("thinking")).toBe("thinking");
     });
   });
 });

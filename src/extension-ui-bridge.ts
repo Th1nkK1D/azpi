@@ -1,9 +1,52 @@
 import type { AgentSideConnection } from "@agentclientprotocol/sdk";
-import type { ExtensionUIContext } from "@earendil-works/pi-coding-agent";
+import type { ExtensionUIContext, Theme, ThemeColor } from "@earendil-works/pi-coding-agent";
 
 const NOT_SUPPORTED_MSG =
   "Interactive dialogs are not supported in ACP mode. " +
   "Extension commands should use pi.sendMessage() for output instead.";
+
+/** Passthrough theme — returns text as-is since ACP mode has no terminal for ANSI. */
+const passthroughTheme = {
+  name: "acp-passthrough",
+  sourcePath: undefined,
+  sourceInfo: undefined,
+  fg(_color: ThemeColor, text: string): string {
+    return text;
+  },
+  bg(_color: string, text: string): string {
+    return text;
+  },
+  bold(text: string): string {
+    return text;
+  },
+  italic(text: string): string {
+    return text;
+  },
+  underline(text: string): string {
+    return text;
+  },
+  inverse(text: string): string {
+    return text;
+  },
+  strikethrough(text: string): string {
+    return text;
+  },
+  getFgAnsi(): string {
+    return "";
+  },
+  getBgAnsi(): string {
+    return "";
+  },
+  getColorMode(): "truecolor" {
+    return "truecolor";
+  },
+  getThinkingBorderColor(): (str: string) => string {
+    return (str: string) => str;
+  },
+  getBashModeBorderColor(): (str: string) => string {
+    return (str: string) => str;
+  },
+};
 
 /**
  * Creates an ExtensionUIContext that bridges `notify()` calls to ACP
@@ -79,8 +122,8 @@ export function createAcpUiBridge(
       return undefined;
     },
 
-    get theme(): any {
-      throw new Error("Theme is not available in ACP mode.");
+    get theme(): Theme {
+      return passthroughTheme as unknown as Theme;
     },
     getAllThemes(): { name: string; path: string | undefined }[] {
       return [];
