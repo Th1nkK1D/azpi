@@ -1,7 +1,7 @@
 import { SessionManager } from "@earendil-works/pi-coding-agent";
 import type { AgentSession } from "@earendil-works/pi-coding-agent";
 import type { AgentSideConnection } from "@agentclientprotocol/sdk";
-import { extractTextContent } from "./event-bridge";
+import { extractMessageText } from "./event-bridge";
 
 /**
  * Resolves a Pi session UUID to its JSONL file path.
@@ -73,7 +73,7 @@ export async function replaySessionHistory(
     const role = message.role;
     if (role !== "user" && role !== "assistant") continue;
 
-    const text = extractTextContent(message);
+    const text = extractMessageText(message);
     if (!text) continue;
 
     if (role === "user") {

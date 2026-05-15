@@ -598,7 +598,7 @@ export class PiAcpAgent implements Agent {
       sessionId,
       update: {
         sessionUpdate: "available_commands_update",
-        availableCommands: discoverCommands(session),
+        availableCommands: discoverCommands(session, this.extensionWhitelist),
       },
     };
 

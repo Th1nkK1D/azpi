@@ -66,7 +66,10 @@ export function isExtensionCommandAllowed(
  * - Skills loaded by the session (via resource loader)
  * - Prompt templates
  */
-export function discoverCommands(session: AgentSession): AvailableCommand[] {
+export function discoverCommands(
+  session: AgentSession,
+  extensionWhitelist?: Set<string> | null,
+): AvailableCommand[] {
   const commands: AvailableCommand[] = [];
 
   for (const cmd of builtinCommands) {
@@ -119,7 +122,7 @@ export function discoverCommands(session: AgentSession): AvailableCommand[] {
     try {
       const registeredCommands = extensionRunner.getRegisteredCommands();
       if (Array.isArray(registeredCommands)) {
-        const whitelist = parseExtensionWhitelist();
+        const whitelist = extensionWhitelist ?? parseExtensionWhitelist();
         for (const cmd of registeredCommands) {
           if (!isExtensionCommandAllowed(cmd.name, whitelist)) {
             continue;

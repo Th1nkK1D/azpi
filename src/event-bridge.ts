@@ -130,7 +130,7 @@ export function mapSessionEvent(
 /**
  * Extracts text content from a Pi AgentMessage, joining all text parts.
  */
-export function extractTextContent(message: any): string | null {
+export function extractMessageText(message: any): string | null {
   if (typeof message?.content === "string") {
     return message.content;
   }
@@ -167,7 +167,7 @@ export function mapStopReason(message: any): StopReason {
  * Maps the final message content from an agent_end event to ACP content blocks.
  */
 export function mapFinalContent(message: any): ContentBlock[] {
-  const text = extractTextContent(message);
+  const text = extractMessageText(message);
   if (!text) {
     return [];
   }
