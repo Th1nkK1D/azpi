@@ -5,6 +5,7 @@ import type {
   ContentBlock,
 } from "@agentclientprotocol/sdk";
 import type { AgentSessionEvent } from "@earendil-works/pi-coding-agent";
+import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import { mapToolCallEnd, mapToolCallStart, mapToolCallUpdate } from "./tool-call-mapper";
 
 /**
@@ -130,12 +131,14 @@ export function mapSessionEvent(
 /**
  * Extracts text content from a Pi AgentMessage, joining all text parts.
  */
-export function extractMessageText(message: any): string | null {
-  if (typeof message?.content === "string") {
-    return message.content;
+export function extractMessageText(message: AgentMessage | undefined): string | null {
+  if (!message || !("content" in message)) return null;
+  const content = (message as { content: unknown }).content;
+  if (typeof content === "string") {
+    return content;
   }
-  if (Array.isArray(message?.content)) {
-    const parts = message.content
+  if (Array.isArray(content)) {
+    const parts = content
       .filter((block: any) => block.type === "text" && typeof block.text === "string")
       .map((block: any) => block.text);
     if (parts.length > 0) {
@@ -148,16 +151,18 @@ export function extractMessageText(message: any): string | null {
 /**
  * Maps a Pi agent_end event to an ACP StopReason.
  */
-export function mapStopReason(message: any): StopReason {
-  const stopReason = message?.stopReason as string | undefined;
-  switch (stopReason) {
-    case "max_tokens":
+export function mapStopReason(message: AgentMessage | undefined): StopReason {
+  if (!message || message.role !== "assistant") {
+    return "end_turn";
+  }
+  switch (message.stopReason) {
+    case "length":
       return "max_tokens";
     case "aborted":
       return "cancelled";
-    case "error":
-    case "end_turn":
     case "stop":
+    case "toolUse":
+    case "error":
     default:
       return "end_turn";
   }
@@ -166,7 +171,7 @@ export function mapStopReason(message: any): StopReason {
 /**
  * Maps the final message content from an agent_end event to ACP content blocks.
  */
-export function mapFinalContent(message: any): ContentBlock[] {
+export function mapFinalContent(message: AgentMessage | undefined): ContentBlock[] {
   const text = extractMessageText(message);
   if (!text) {
     return [];

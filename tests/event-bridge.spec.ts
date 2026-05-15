@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import type { SessionConfigOption } from "@agentclientprotocol/sdk";
 import type { StopReason } from "@agentclientprotocol/sdk";
 import type { AgentSessionEvent } from "@earendil-works/pi-coding-agent";
+import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import { mapFinalContent, mapSessionEvent, mapStopReason } from "../src/event-bridge";
 
 const SID = "test-session";
@@ -192,37 +193,48 @@ describe("event-bridge", () => {
   describe("mapStopReason", () => {
     it.each([
       ["aborted", "cancelled"],
+      ["length", "max_tokens"],
       ["error", "end_turn"],
-      ["end_turn", "end_turn"],
-      ["max_tokens", "max_tokens"],
       ["stop", "end_turn"],
+      ["toolUse", "end_turn"],
       [undefined, "end_turn"],
-      ["unknown", "end_turn"],
     ])("maps %s → %s", (input, expected) => {
-      const msg = { stopReason: input };
-      expect(mapStopReason(msg)).toBe(expected as StopReason);
+      const msg = { role: "assistant" as const, stopReason: input };
+      expect(mapStopReason(msg as unknown as AgentMessage)).toBe(expected as StopReason);
+    });
+
+    it("returns end_turn for non-assistant messages", () => {
+      expect(mapStopReason({ role: "user" } as unknown as AgentMessage)).toBe("end_turn");
+    });
+
+    it("returns end_turn for undefined", () => {
+      expect(mapStopReason(undefined)).toBe("end_turn");
     });
   });
 
   describe("mapFinalContent", () => {
     it("extracts text from string content", () => {
-      const msg = { content: "Final answer" };
-      const result = mapFinalContent(msg);
+      const msg = { role: "user" as const, content: "Final answer", timestamp: 0 };
+      const result = mapFinalContent(msg as unknown as AgentMessage);
       expect(result).toEqual([{ text: "Final answer", type: "text" }]);
     });
 
     it("extracts text from array content", () => {
-      const msg = { content: [{ text: "Array answer", type: "text" }] };
-      const result = mapFinalContent(msg);
+      const msg = {
+        role: "user" as const,
+        content: [{ text: "Array answer", type: "text" }],
+        timestamp: 0,
+      };
+      const result = mapFinalContent(msg as unknown as Parameters<typeof mapFinalContent>[0]);
       expect(result).toEqual([{ text: "Array answer", type: "text" }]);
     });
 
     it("returns empty array for no text", () => {
-      const msg = { content: [] };
-      expect(mapFinalContent(msg)).toEqual([]);
+      const msg = { role: "user" as const, content: [], timestamp: 0 };
+      expect(mapFinalContent(msg as unknown as Parameters<typeof mapFinalContent>[0])).toEqual([]);
     });
 
-    it("returns empty array for null message", () => {
+    it("returns empty array for undefined message", () => {
       expect(mapFinalContent(undefined)).toEqual([]);
     });
   });

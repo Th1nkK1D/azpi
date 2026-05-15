@@ -67,8 +67,7 @@ export async function replaySessionHistory(
   for (const entry of entries) {
     if (entry.type !== "message") continue;
 
-    const message = (entry as any).message;
-    if (!message) continue;
+    const message = entry.message;
 
     const role = message.role;
     if (role !== "user" && role !== "assistant") continue;
