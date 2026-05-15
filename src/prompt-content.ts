@@ -1,8 +1,15 @@
 import { RequestError } from "@agentclientprotocol/sdk";
 import type { ContentBlock } from "@agentclientprotocol/sdk";
+import { completeSimple } from "@earendil-works/pi-ai";
 import type { Model, ImageContent } from "@earendil-works/pi-ai";
 
-const MAX_SESSION_NAME_LENGTH = 60;
+export const MAX_SESSION_NAME_LENGTH = 60;
+
+const SESSION_NAMING_SYSTEM_PROMPT =
+  "You are a session naming assistant. Given the first message in a conversation, " +
+  `generate a concise, descriptive session name (maximum ${MAX_SESSION_NAME_LENGTH} characters). ` +
+  "The name should capture the core topic or task. " +
+  "Reply with ONLY the name — no quotes, no explanation, no trailing punctuation.";
 
 /**
  * Converts ACP ContentBlock[] into text + images for Pi session.prompt().
@@ -82,6 +89,49 @@ function stripDataUri(data: string): string {
     return data.slice(idx + 1);
   }
   return data;
+}
+
+/**
+ * Extracts all text from ContentBlock[], concatenating text blocks and
+ * placeholders for non-text blocks. Returns trimmed result or empty string.
+ */
+export function extractTextContent(content: ContentBlock[]): string {
+  return content.reduce((str, block) => str + getBlockText(block), "").trim();
+}
+
+/**
+ * Generates a session name by calling an LLM with a concise naming prompt.
+ * Uses completeSimple (non-streaming) for minimal overhead.
+ * Returns undefined if the model produces no usable text.
+ */
+export async function generateSessionName(
+  model: Model<any>,
+  promptText: string,
+  apiKey?: string,
+  headers?: Record<string, string>,
+): Promise<string | undefined> {
+  const message = await completeSimple(
+    model,
+    {
+      systemPrompt: SESSION_NAMING_SYSTEM_PROMPT,
+      messages: [{ role: "user", content: promptText.slice(0, 500), timestamp: Date.now() }],
+    },
+    {
+      maxTokens: 30,
+      temperature: 0,
+      apiKey,
+      headers,
+    },
+  );
+
+  const textContent = message.content.find((c) => c.type === "text");
+  if (!textContent) return undefined;
+
+  const name = textContent.text.trim();
+  if (!name) return undefined;
+
+  if (name.length <= MAX_SESSION_NAME_LENGTH) return name;
+  return name.slice(0, MAX_SESSION_NAME_LENGTH).trimEnd() + "...";
 }
 
 /**

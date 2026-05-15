@@ -17,7 +17,7 @@ Pi does not support ACP out of the box. While there are a few ACP adapters that 
 - **Startup message** — Displays Pi version, loaded contexts, extensions, and skills upon launch.
 - **Rich content** — Handles `text`, `image`, `resource`, and `resource_link` content blocks.
 - **Real-time event streaming** — Bridges text, thinking, tool execution, and session info changes directly to ACP.
-- **Auto session naming** — Automatically derives session names from the initial prompt.
+- **Auto session naming** — Automatically derives session names from the initial prompt. Set `AZPI_SESSION_NAMING_MODEL` to a `provider/modelId` to generate names via LLM. Falls back to the heuristic trimming method.
 - **Client tool proxy** — Delegates `read`, `write`, `edit`, and `bash` to the ACP client when available, enabling editors like Zed to display agent change diffs.
 - **Slash commands** — Supports Pi's built-in commands (`/name`, `/session`, `/compact`, `/export`, and `/reload`), skills, prompt templates, and extension commands (opt-in via `AZPI_ALLOW_EXTENSION_COMMANDS`, disabled by default).
 
@@ -43,8 +43,9 @@ The binary will be available at `dist/azpi`. Here is an example configuration fo
       // Extension commands exposed to ACP clients (disabled by default)
       // Set to `*` to allow all extension commands
       "AZPI_ALLOW_EXTENSION_COMMANDS": "deploy,compress-stats",
-      // Set to "true" to handle package installation via CLI
-      // rather than automatically through the SDK
+      // Set a model for auto session naming
+      "AZPI_SESSION_NAMING_MODEL": "opencode-go/deepseek-v4-flash",
+      // Handle package installation via CLI rather than automatically through the SDK
       "PI_OFFLINE": "true"
     }
   }

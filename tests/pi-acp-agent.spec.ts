@@ -9,6 +9,7 @@ import type {
 import { PiAcpAgent } from "../src/pi-acp-agent";
 import type { AgentSession } from "@earendil-works/pi-coding-agent";
 import type { Model } from "@earendil-works/pi-ai";
+import * as realPiAi from "@earendil-works/pi-ai";
 
 function createMockConnection(): AgentSideConnection & {
   sessionUpdate: ReturnType<typeof mock>;
@@ -89,11 +90,19 @@ function createMockSession(overrides?: Partial<AgentSession>): AgentSession {
   } as unknown as AgentSession;
 }
 
-function createMockRegistry(models: Model<any>[]) {
+function createMockRegistry(
+  models: Model<any>[],
+  apiKeyAndHeaders?:
+    | { ok: true; apiKey?: string; headers?: Record<string, string> }
+    | { ok: false; error: string },
+) {
   return {
     getAvailable: () => models,
     find: (provider: string, id: string) =>
       models.find((m) => m.provider === provider && m.id === id),
+    getApiKeyAndHeaders: mock(
+      async () => apiKeyAndHeaders ?? { ok: true as const, apiKey: "test-key" },
+    ),
   };
 }
 
@@ -633,6 +642,8 @@ describe("PiAcpAgent", () => {
       }, 5);
 
       await agent.prompt(promptReq(newResult.sessionId, "Hello, how are you?"));
+      // Fire-and-forget: wait for background naming to complete
+      await new Promise((r) => setTimeout(r, 10));
       expect(mockSession.setSessionName).toHaveBeenCalledWith("Hello, how are you?");
     });
 
@@ -656,7 +667,82 @@ describe("PiAcpAgent", () => {
       }, 5);
 
       await agent.prompt(promptReq(newResult.sessionId, "Hello, how are you?"));
+      // Fire-and-forget: wait for background naming to complete
+      await new Promise((r) => setTimeout(r, 10));
       expect(mockSession.setSessionName).not.toHaveBeenCalled();
+    });
+
+    it("uses LLM-generated name when AZPI_SESSION_NAMING_MODEL is set", async () => {
+      const namingModel = createMockModel({ id: "naming-model", provider: "openai" });
+      const models = [namingModel];
+      const mockSession = createMockSession({ model: models[0], sessionName: undefined });
+      const conn = createMockConnection();
+      const agent = new PiAcpAgent(conn, {
+        authStorage: createMockAuthStorage(),
+        modelRegistry: createMockRegistry(models) as any,
+        sessionFactory: async () => ({ session: mockSession }),
+      });
+
+      const mockCompleteSimple = mock(async () => ({
+        content: [{ type: "text", text: "LLM Generated Name" }],
+      }));
+      mock.module("@earendil-works/pi-ai", () => ({
+        ...realPiAi,
+        completeSimple: mockCompleteSimple,
+      }));
+
+      process.env.AZPI_SESSION_NAMING_MODEL = "openai/naming-model";
+
+      const newResult = await agent.newSession(newSessionReq());
+
+      const subscribers = (mockSession as any)._subscribers as Array<(event: any) => void>;
+      setTimeout(() => {
+        for (const sub of subscribers) {
+          sub({ type: "agent_end", messages: [{ stopReason: "end_turn" }] });
+        }
+      }, 5);
+
+      await agent.prompt(promptReq(newResult.sessionId, "Fix auth"));
+      // Fire-and-forget: wait for background naming to complete
+      await new Promise((r) => setTimeout(r, 10));
+
+      expect(mockCompleteSimple).toHaveBeenCalledTimes(1);
+      expect(mockSession.setSessionName).toHaveBeenCalledWith("LLM Generated Name");
+
+      delete process.env.AZPI_SESSION_NAMING_MODEL;
+      mock.module("@earendil-works/pi-ai", () => realPiAi);
+    });
+
+    it("falls back to deriveSessionName when AZPI_SESSION_NAMING_MODEL fails", async () => {
+      const namingModel = createMockModel({ id: "bad-model", provider: "openai" });
+      const models = [namingModel];
+      const mockSession = createMockSession({ model: models[0], sessionName: undefined });
+      const conn = createMockConnection();
+      const agent = new PiAcpAgent(conn, {
+        authStorage: createMockAuthStorage(),
+        modelRegistry: createMockRegistry(models, { ok: false, error: "auth failed" }) as any,
+        sessionFactory: async () => ({ session: mockSession }),
+      });
+
+      process.env.AZPI_SESSION_NAMING_MODEL = "openai/bad-model";
+
+      const newResult = await agent.newSession(newSessionReq());
+
+      const subscribers = (mockSession as any)._subscribers as Array<(event: any) => void>;
+      setTimeout(() => {
+        for (const sub of subscribers) {
+          sub({ type: "agent_end", messages: [{ stopReason: "end_turn" }] });
+        }
+      }, 5);
+
+      await agent.prompt(promptReq(newResult.sessionId, "Some prompt"));
+      // Fire-and-forget: wait for background naming to complete
+      await new Promise((r) => setTimeout(r, 10));
+
+      // Falls back to deriveSessionName (text heuristic from real module)
+      expect(mockSession.setSessionName).toHaveBeenCalledWith("Some prompt");
+
+      delete process.env.AZPI_SESSION_NAMING_MODEL;
     });
   });
 

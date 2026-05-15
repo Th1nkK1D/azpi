@@ -6,6 +6,7 @@ import type {
   CancelNotification,
   ClientCapabilities,
   CloseSessionRequest,
+  ContentBlock,
   InitializeRequest,
   InitializeResponse,
   ListSessionsRequest,
@@ -40,7 +41,12 @@ import type {
 import type { Model } from "@earendil-works/pi-ai";
 import { createAcpProxyTools } from "./client-tool-proxy";
 import { mapSessionEvent, mapStopReason } from "./event-bridge";
-import { convertPromptContent, deriveSessionName } from "./prompt-content";
+import {
+  convertPromptContent,
+  deriveSessionName,
+  extractTextContent,
+  generateSessionName,
+} from "./prompt-content";
 import {
   buildModelConfigOption,
   buildModelState,
@@ -346,10 +352,7 @@ export class PiAcpAgent implements Agent {
     }
 
     if (!session.sessionName) {
-      const name = deriveSessionName(prompt);
-      if (name) {
-        session.setSessionName(name);
-      }
+      this.startSessionNaming(session, prompt);
     }
 
     const controller = new AbortController();
@@ -418,6 +421,47 @@ export class PiAcpAgent implements Agent {
     };
 
     await this.connection.sessionUpdate(notification);
+  }
+
+  /**
+   * Fire-and-forget session naming. Sets the session name asynchronously
+   * without blocking the main prompt flow.
+   *
+   * If AZPI_SESSION_NAMING_MODEL env var is set to "provider/modelId",
+   * calls that model to generate a concise name from the first prompt.
+   * Falls back to deriveSessionName (text heuristic) on any failure.
+   */
+  private startSessionNaming(session: AgentSession, prompt: ContentBlock[]): void {
+    const namingModelId = process.env.AZPI_SESSION_NAMING_MODEL?.trim();
+
+    (async () => {
+      try {
+        let name: string | undefined;
+
+        if (namingModelId) {
+          try {
+            const namingModel = resolveModelById(this.modelRegistry, namingModelId);
+            const auth = await this.modelRegistry.getApiKeyAndHeaders(namingModel);
+            const promptText = extractTextContent(prompt);
+            if (promptText && auth.ok) {
+              name = await generateSessionName(namingModel, promptText, auth.apiKey, auth.headers);
+            }
+          } catch {
+            // Fall through to deriveSessionName
+          }
+        }
+
+        if (!name) {
+          name = deriveSessionName(prompt);
+        }
+
+        if (name) {
+          session.setSessionName(name);
+        }
+      } catch {
+        // Best-effort naming — silently ignore failures
+      }
+    })();
   }
 
   private async createAndRegisterSession({

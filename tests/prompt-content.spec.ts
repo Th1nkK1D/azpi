@@ -1,7 +1,13 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it, mock } from "bun:test";
 import { RequestError } from "@agentclientprotocol/sdk";
 import type { ContentBlock } from "@agentclientprotocol/sdk";
-import { convertPromptContent, deriveSessionName } from "../src/prompt-content";
+import {
+  convertPromptContent,
+  deriveSessionName,
+  extractTextContent,
+  generateSessionName,
+  MAX_SESSION_NAME_LENGTH,
+} from "../src/prompt-content";
 import type { Model } from "@earendil-works/pi-ai";
 
 function createMockModel(overrides?: Partial<Model<any>>): Model<any> {
@@ -250,9 +256,11 @@ describe("deriveSessionName", () => {
     expect(deriveSessionName(createTextPrompt("Hello, how are you?"))).toBe("Hello, how are you?");
   });
 
-  it("truncates text longer than 60 characters", () => {
+  it("truncates text longer than MAX_SESSION_NAME_LENGTH characters", () => {
     const longText = "a".repeat(100);
-    expect(deriveSessionName(createTextPrompt(longText))).toBe("a".repeat(60) + "...");
+    expect(deriveSessionName(createTextPrompt(longText))).toBe(
+      "a".repeat(MAX_SESSION_NAME_LENGTH) + "...",
+    );
   });
 
   it("uses only the first line for session name", () => {
@@ -312,5 +320,126 @@ describe("deriveSessionName", () => {
         },
       ]),
     ).toBe("Read [package.json][audio/wav]");
+  });
+});
+
+describe("extractTextContent", () => {
+  it("concatenates text blocks", () => {
+    const blocks: ContentBlock[] = [
+      { type: "text", text: "Hello " },
+      { type: "text", text: "world" },
+    ];
+    expect(extractTextContent(blocks)).toBe("Hello world");
+  });
+
+  it("uses filename placeholders for non-text blocks", () => {
+    const blocks: ContentBlock[] = [
+      { type: "text", text: "Read " },
+      {
+        type: "resource",
+        resource: { uri: "file:///src/app.ts", mimeType: "text/typescript", text: "const x = 1;" },
+      },
+    ];
+    expect(extractTextContent(blocks)).toBe("Read [app.ts]");
+  });
+
+  it("returns empty string for empty array", () => {
+    expect(extractTextContent([])).toBe("");
+  });
+
+  it("returns empty string for whitespace-only blocks", () => {
+    expect(extractTextContent([{ type: "text", text: "   \n  " }])).toBe("");
+  });
+});
+
+describe("generateSessionName", () => {
+  const mockModel = createMockModel({
+    id: "gpt-4o-mini",
+    provider: "openai",
+  });
+
+  it("returns LLM-generated name from text content", async () => {
+    const mockCompleteSimple = mock().mockResolvedValue({
+      content: [{ type: "text", text: "Fix auth middleware" }],
+    });
+    mock.module("@earendil-works/pi-ai", () => ({
+      completeSimple: mockCompleteSimple,
+    }));
+
+    const name = await generateSessionName(
+      mockModel,
+      "Fix the auth middleware token expiry check",
+      "key123",
+    );
+
+    expect(name).toBe("Fix auth middleware");
+    expect(mockCompleteSimple).toHaveBeenCalledTimes(1);
+    const callContext = mockCompleteSimple.mock.calls[0]![1];
+    expect(callContext.systemPrompt).toContain("session naming assistant");
+    expect(callContext.messages[0].role).toBe("user");
+  });
+
+  it("truncates result longer than MAX_SESSION_NAME_LENGTH characters", async () => {
+    const longName = "a".repeat(80);
+    mock.module("@earendil-works/pi-ai", () => ({
+      completeSimple: mock().mockResolvedValue({
+        content: [{ type: "text", text: longName }],
+      }),
+    }));
+
+    const name = await generateSessionName(mockModel, "some prompt", "key123");
+    expect(name).toBe("a".repeat(MAX_SESSION_NAME_LENGTH) + "...");
+  });
+
+  it("returns undefined when response has no text content", async () => {
+    mock.module("@earendil-works/pi-ai", () => ({
+      completeSimple: mock().mockResolvedValue({
+        content: [{ type: "thinking", thinking: "hmm" }],
+      }),
+    }));
+
+    const name = await generateSessionName(mockModel, "some prompt", "key123");
+    expect(name).toBeUndefined();
+  });
+
+  it("returns undefined for empty text response", async () => {
+    mock.module("@earendil-works/pi-ai", () => ({
+      completeSimple: mock().mockResolvedValue({
+        content: [{ type: "text", text: "  " }],
+      }),
+    }));
+
+    const name = await generateSessionName(mockModel, "some prompt", "key123");
+    expect(name).toBeUndefined();
+  });
+
+  it("truncates prompt text to 500 characters", async () => {
+    const mockCompleteSimple = mock().mockResolvedValue({
+      content: [{ type: "text", text: "Short name" }],
+    });
+    mock.module("@earendil-works/pi-ai", () => ({
+      completeSimple: mockCompleteSimple,
+    }));
+
+    const longPrompt = "x".repeat(1000);
+    await generateSessionName(mockModel, longPrompt, "key123");
+
+    const callContext = mockCompleteSimple.mock.calls[0]![1];
+    expect(callContext.messages[0].content.length).toBeLessThanOrEqual(500);
+  });
+
+  it("passes apiKey and headers to options", async () => {
+    const mockCompleteSimple = mock().mockResolvedValue({
+      content: [{ type: "text", text: "Name" }],
+    });
+    mock.module("@earendil-works/pi-ai", () => ({
+      completeSimple: mockCompleteSimple,
+    }));
+
+    await generateSessionName(mockModel, "prompt", "my-key", { "X-Custom": "val" });
+
+    const callOptions = mockCompleteSimple.mock.calls[0]![2];
+    expect(callOptions.apiKey).toBe("my-key");
+    expect(callOptions.headers).toEqual({ "X-Custom": "val" });
   });
 });
