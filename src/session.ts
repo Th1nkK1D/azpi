@@ -2,6 +2,7 @@ import { SessionManager } from "@earendil-works/pi-coding-agent";
 import type { AgentSession } from "@earendil-works/pi-coding-agent";
 import type { AgentSideConnection } from "@agentclientprotocol/sdk";
 import { extractMessageText } from "./event-bridge";
+import { SessionUpdateType } from "./session-update-types";
 
 /**
  * Resolves a Pi session UUID to its JSONL file path.
@@ -80,7 +81,7 @@ export async function replaySessionHistory(
         connection.sessionUpdate({
           sessionId,
           update: {
-            sessionUpdate: "user_message_chunk",
+            sessionUpdate: SessionUpdateType.UserMessageChunk,
             content: { type: "text", text },
           },
         }),
@@ -90,7 +91,7 @@ export async function replaySessionHistory(
         connection.sessionUpdate({
           sessionId,
           update: {
-            sessionUpdate: "agent_message_chunk",
+            sessionUpdate: SessionUpdateType.AgentMessageChunk,
             content: { type: "text", text },
           },
         }),

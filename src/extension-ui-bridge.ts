@@ -1,5 +1,6 @@
 import type { AgentSideConnection } from "@agentclientprotocol/sdk";
 import type { ExtensionUIContext, Theme, ThemeColor } from "@earendil-works/pi-coding-agent";
+import { SessionUpdateType } from "./session-update-types";
 
 const NOT_SUPPORTED_MSG =
   "Interactive dialogs are not supported in ACP mode. " +
@@ -69,7 +70,7 @@ export function createAcpUiBridge(
           sessionId,
           update: {
             content: { text: message, type: "text" },
-            sessionUpdate: "agent_message_chunk",
+            sessionUpdate: SessionUpdateType.AgentMessageChunk,
           },
         })
         .catch(() => {

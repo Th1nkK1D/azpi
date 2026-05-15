@@ -53,6 +53,7 @@ import {
   buildThinkingLevelConfigOption,
   resolveModelById,
 } from "./model";
+import { SessionUpdateType } from "./session-update-types";
 import { buildStartupMessage } from "./startup-message";
 import { name as AGENT_NAME, version as AGENT_VERSION } from "../package.json";
 import {
@@ -160,7 +161,7 @@ export class PiAcpAgent implements Agent {
           sessionId,
           update: {
             content: { text: buildStartupMessage(session), type: "text" },
-            sessionUpdate: "agent_message_chunk",
+            sessionUpdate: SessionUpdateType.AgentMessageChunk,
           },
         }),
       );
@@ -288,7 +289,7 @@ export class PiAcpAgent implements Agent {
           sessionId,
           update: {
             content: { text: buildStartupMessage(session), type: "text" },
-            sessionUpdate: "agent_message_chunk",
+            sessionUpdate: SessionUpdateType.AgentMessageChunk,
           },
         }),
       );
@@ -311,7 +312,7 @@ export class PiAcpAgent implements Agent {
             sessionId,
             update: {
               content: { text: result, type: "text" },
-              sessionUpdate: "agent_message_chunk",
+              sessionUpdate: SessionUpdateType.AgentMessageChunk,
             },
           });
 
@@ -335,7 +336,7 @@ export class PiAcpAgent implements Agent {
                   `Set AZPI_ALLOW_EXTENSION_COMMANDS to whitelist it.`,
                 type: "text",
               },
-              sessionUpdate: "agent_message_chunk",
+              sessionUpdate: SessionUpdateType.AgentMessageChunk,
             },
           });
 
@@ -415,7 +416,7 @@ export class PiAcpAgent implements Agent {
     const notification: SessionNotification = {
       sessionId,
       update: {
-        sessionUpdate: "config_option_update",
+        sessionUpdate: SessionUpdateType.ConfigOptionUpdate,
         configOptions: this.buildConfigOptions(session),
       },
     };
@@ -582,7 +583,7 @@ export class PiAcpAgent implements Agent {
         this.connection.sessionUpdate({
           sessionId,
           update: {
-            sessionUpdate: "session_info_update",
+            sessionUpdate: SessionUpdateType.SessionInfoUpdate,
             updatedAt: new Date().toISOString(),
           },
         }),
@@ -597,7 +598,7 @@ export class PiAcpAgent implements Agent {
     const notification: SessionNotification = {
       sessionId,
       update: {
-        sessionUpdate: "available_commands_update",
+        sessionUpdate: SessionUpdateType.AvailableCommandsUpdate,
         availableCommands: discoverCommands(session, this.extensionWhitelist),
       },
     };
@@ -612,7 +613,7 @@ export class PiAcpAgent implements Agent {
         sessionId,
         update: {
           content: { text: `❌ Error: ${message}`, type: "text" },
-          sessionUpdate: "agent_message_chunk",
+          sessionUpdate: SessionUpdateType.AgentMessageChunk,
         },
       }),
     );

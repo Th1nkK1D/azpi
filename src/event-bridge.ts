@@ -7,6 +7,7 @@ import type {
 import type { AgentSessionEvent } from "@earendil-works/pi-coding-agent";
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import { mapToolCallEnd, mapToolCallStart, mapToolCallUpdate } from "./tool-call-mapper";
+import { SessionUpdateType } from "./session-update-types";
 
 /**
  * Maps a Pi AgentSessionEvent to an ACP SessionNotification, or null if the event
@@ -29,7 +30,7 @@ export function mapSessionEvent(
           sessionId,
           update: {
             content: { text: delta, type: "text" },
-            sessionUpdate: "agent_message_chunk",
+            sessionUpdate: SessionUpdateType.AgentMessageChunk,
           },
         };
       } else if (assistantEvent?.type === "thinking_delta") {
@@ -41,7 +42,7 @@ export function mapSessionEvent(
           sessionId,
           update: {
             content: { text: delta, type: "text" },
-            sessionUpdate: "agent_thought_chunk",
+            sessionUpdate: SessionUpdateType.AgentThoughtChunk,
           },
         };
       }
@@ -62,7 +63,7 @@ export function mapSessionEvent(
       return {
         sessionId,
         update: {
-          sessionUpdate: "tool_call",
+          sessionUpdate: SessionUpdateType.ToolCall,
           ...mapToolCallStart(event),
         },
       };
@@ -72,7 +73,7 @@ export function mapSessionEvent(
       return {
         sessionId,
         update: {
-          sessionUpdate: "tool_call_update",
+          sessionUpdate: SessionUpdateType.ToolCallUpdate,
           ...mapToolCallUpdate(event),
         },
       };
@@ -82,7 +83,7 @@ export function mapSessionEvent(
       return {
         sessionId,
         update: {
-          sessionUpdate: "tool_call_update",
+          sessionUpdate: SessionUpdateType.ToolCallUpdate,
           ...mapToolCallEnd(event),
         },
       };
@@ -92,7 +93,7 @@ export function mapSessionEvent(
       return {
         sessionId,
         update: {
-          sessionUpdate: "session_info_update",
+          sessionUpdate: SessionUpdateType.SessionInfoUpdate,
           title: event.name ?? null,
         },
       };
@@ -103,7 +104,7 @@ export function mapSessionEvent(
       return {
         sessionId,
         update: {
-          sessionUpdate: "config_option_update",
+          sessionUpdate: SessionUpdateType.ConfigOptionUpdate,
           configOptions,
         },
       };

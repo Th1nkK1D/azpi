@@ -1,4 +1,3 @@
-/* eslint-disable no-await-in-loop */
 import type { AgentSideConnection, ClientCapabilities } from "@agentclientprotocol/sdk";
 import type { ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { defineTool } from "@earendil-works/pi-coding-agent";
@@ -238,6 +237,7 @@ function createBashProxy(
         let accumulated = "";
         const startTime = Date.now();
 
+        /* eslint-disable no-await-in-loop */
         while (true) {
           if (signal?.aborted) {
             await terminal.kill();
@@ -291,6 +291,7 @@ ${finalOutput.output}`,
 
           await sleep(BASH_POLL_INTERVAL, signal);
         }
+        /* eslint-enable no-await-in-loop */
       } catch (err) {
         try {
           await terminal.release();
