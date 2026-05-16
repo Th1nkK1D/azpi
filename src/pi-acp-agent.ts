@@ -55,7 +55,7 @@ import {
 } from "./model";
 import { SessionUpdateType } from "./session-update-types";
 import { buildStartupMessage } from "./startup-message";
-import { name as AGENT_NAME, version as AGENT_VERSION } from "../package.json";
+import { version as AGENT_VERSION } from "../package.json";
 import {
   findBuiltinCommand,
   parseSlashCommand,
@@ -129,7 +129,7 @@ export class PiAcpAgent implements Agent {
         },
       },
       agentInfo: {
-        name: AGENT_NAME,
+        name: "AZPi",
         version: AGENT_VERSION,
       },
       protocolVersion: PROTOCOL_VERSION,

@@ -132,7 +132,7 @@ describe("PiAcpAgent", () => {
         protocolVersion: PROTOCOL_VERSION,
       });
       expect(result.protocolVersion).toBe(PROTOCOL_VERSION);
-      expect(result.agentInfo?.name).toBe("azpi");
+      expect(result.agentInfo?.name).toBe("AZPi");
       expect(result.agentInfo?.version).toBe("0.1.0");
     });
 

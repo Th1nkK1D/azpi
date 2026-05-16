@@ -1,4 +1,11 @@
-# azpi
+<p align="center">
+░░░░▓▓░░░▓▓▓▓▓▓░░▓▓▓▓▓▓░░░<br>
+░░▓▓░░▓▓░░░░▓▓▓░░▓▓░░▓▓░░░<br>
+░▓▓░▓▓░▓▓░▓▓░░░░░▓▓▓▓░░▓▓░<br>
+░▓▓░░░░▓▓░▓▓▓▓▓▓░▓▓░░░░▓▓░<br>
+</p>
+
+# AZPi
 
 A seamless ACP client built on top of the Pi coding agent.
 
@@ -8,7 +15,7 @@ The [Agent Client Protocol (ACP)](https://agentclientprotocol.com) standardizes 
 
 Pi does not support ACP out of the box. While there are a few ACP adapters that communicate with Pi via [RPC mode](https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/sdk.md) (such as [svkozak/pi-acp](https://github.com/svkozak/pi-acp), my main inspiration), that approach decouples the adapter from Pi to allow shared use of the same executable. However, this often results in ACP features being limited by Pi's RPC constraints.
 
-**azpi** takes a different approach by using [Pi's JavaScript SDK](https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/sdk.md). This allows us to maximize Pi's functionality and support a broader range of ACP specifications, trading off the requirement of bundling the Pi coding agent within the package.
+**AZPi** takes a different approach by using [Pi's JavaScript SDK](https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/sdk.md). This allows us to maximize Pi's functionality and support a broader range of ACP specifications, trading off the requirement of bundling the Pi coding agent within the package.
 
 ## Features
 
@@ -36,7 +43,7 @@ The binary will be available at `dist/azpi`. Here is an example configuration fo
 
 ```jsonc
 "agent_servers": {
-  "azpi": {
+  "AZPi": {
     "type": "custom",
     "command": "<path-to-repository>/dist/azpi",
     "env": {

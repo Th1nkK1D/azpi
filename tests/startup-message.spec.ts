@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { buildStartupMessage } from "../src/startup-message";
-import { name as AGENT_NAME, version as AGENT_VERSION } from "../package.json";
+import { version as AGENT_VERSION } from "../package.json";
 import { version as PI_VERSION } from "../node_modules/@earendil-works/pi-coding-agent/package.json";
 import type { AgentSession } from "@earendil-works/pi-coding-agent";
 
@@ -21,7 +21,7 @@ describe("buildStartupMessage", () => {
   it("includes agent name and version", () => {
     const session = createMockSession({});
     const result = buildStartupMessage(session);
-    expect(result).toContain(AGENT_NAME);
+    expect(result).toContain("AZPi");
     expect(result).toContain(AGENT_VERSION);
   });
 

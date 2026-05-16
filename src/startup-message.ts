@@ -1,6 +1,6 @@
 import type { AgentSession } from "@earendil-works/pi-coding-agent";
 import { version as PI_VERSION } from "../node_modules/@earendil-works/pi-coding-agent/package.json";
-import { name as AGENT_NAME, version as AGENT_VERSION } from "../package.json";
+import { version as AGENT_VERSION } from "../package.json";
 
 /**
  * Builds a markdown startup message with agent metadata for display in the ACP client.
@@ -11,7 +11,7 @@ export function buildStartupMessage({ resourceLoader }: AgentSession): string {
   const { skills } = resourceLoader.getSkills();
 
   return [
-    `### ${AGENT_NAME} v${AGENT_VERSION}`,
+    `### AZPi v${AGENT_VERSION}`,
     "",
     `Using Pi coding agent v${PI_VERSION}`,
     "",
