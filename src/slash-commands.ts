@@ -1,7 +1,6 @@
 import type { AgentSession, ResolvedCommand } from "@earendil-works/pi-coding-agent";
 import type { AvailableCommand } from "@agentclientprotocol/sdk";
 
-const HINT_PLACEHOLDER = "Arguments for the command";
 const ALLOW_ALL = "*";
 
 interface SlashCommandMatch {
@@ -90,7 +89,6 @@ export function discoverCommands(
           commands.push({
             name: `skill:${skill.name}`,
             description: skill.description || `Skill: ${skill.name}`,
-            input: { hint: HINT_PLACEHOLDER },
           });
         }
       }
@@ -108,7 +106,6 @@ export function discoverCommands(
           commands.push({
             name: `:${template.name}`,
             description: template.description || `Prompt template: ${template.name}`,
-            input: { hint: HINT_PLACEHOLDER },
           });
         }
       }
@@ -130,7 +127,6 @@ export function discoverCommands(
           commands.push({
             name: cmd.invocationName,
             description: cmd.description || `Extension command: ${cmd.name}`,
-            input: { hint: HINT_PLACEHOLDER },
           });
         }
       }
