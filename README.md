@@ -30,22 +30,22 @@ Pi does not support ACP out of the box. While there are a few ACP adapters that 
 
 ## Usage
 
-The package is not yet pre-built or published. You can clone the repository and build the project using [Bun](https://bun.com/):
+The package is not yet pre-built or published. You can clone the repository, install dependencies and run AZPi using [Bun](https://bun.com/):
 
 ```bash
 git clone https://github.com/Th1nkK1D/azpi.git
 cd azpi
-bun i --frozen-lockfile --production --ignore-scripts
-bun run build
+bun i
 ```
 
-The binary will be available at `dist/azpi`. Here is an example configuration for Zed:
+An example configuration for Zed:
 
 ```jsonc
 "agent_servers": {
   "AZPi": {
     "type": "custom",
-    "command": "<path-to-repository>/dist/azpi",
+    "command": "bun",
+    "args": ["/path/to/repository"],
     "env": {
       // Extension commands exposed to ACP clients (disabled by default)
       // Set to `*` to allow all extension commands
