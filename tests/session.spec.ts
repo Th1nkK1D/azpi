@@ -157,7 +157,9 @@ function createMockSessionWithEntries(entries: any[]): AgentSession {
     reload: mock(async () => {}),
   };
 
-  const mockSessionManager = { getEntries: () => entries };
+  const mockSessionManager = {
+    getBranch: () => entries,
+  };
 
   return {
     sessionId: "test-session",
@@ -293,5 +295,37 @@ describe("replaySessionHistory", () => {
 
     await replaySessionHistory(session, "test-session", conn);
     expect(conn.sessionUpdate).not.toHaveBeenCalled();
+  });
+
+  it("only replays entries on the active branch path (not abandoned branches)", async () => {
+    const conn = createMockConnection();
+
+    const allEntries = [
+      { type: "message", message: { role: "user", content: "Task 1" } },
+      { type: "message", message: { role: "assistant", content: "Response 1" } },
+      { type: "message", message: { role: "user", content: "Task 2 (abandoned)" } },
+      { type: "message", message: { role: "assistant", content: "Response 2 (abandoned)" } },
+      { type: "branch_summary", summary: "switched" },
+      { type: "message", message: { role: "user", content: "Task 3 (active)" } },
+      { type: "message", message: { role: "assistant", content: "Response 3 (active)" } },
+    ];
+
+    const activeBranch = [
+      allEntries[0], // Task 1
+      allEntries[4], // branch_summary
+      allEntries[5], // Task 3 (active)
+      allEntries[6], // Response 3 (active)
+    ];
+
+    const session = createMockSessionWithEntries(allEntries);
+    (session.sessionManager as any).getBranch = () => activeBranch;
+
+    await replaySessionHistory(session, "test-session", conn);
+
+    // Should replay 3 messages (skipping the branch_summary entry)
+    expect(conn.sessionUpdate).toHaveBeenCalledTimes(3);
+    const calls = conn.sessionUpdate.mock.calls as any[];
+    const texts = calls.map((c: any) => c[0].update.content.text);
+    expect(texts).toEqual(["Task 1", "Task 3 (active)", "Response 3 (active)"]);
   });
 });

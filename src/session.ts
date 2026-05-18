@@ -62,7 +62,7 @@ export async function replaySessionHistory(
   sessionId: string,
   connection: AgentSideConnection,
 ): Promise<void> {
-  const entries = session.sessionManager.getEntries();
+  const entries = session.sessionManager.getBranch();
   const updates: Promise<void>[] = [];
 
   for (const entry of entries) {
