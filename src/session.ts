@@ -54,14 +54,19 @@ export class SessionResolver {
 /**
  * Replays conversation history from a Pi session as ACP session/update notifications.
  *
- * MVP: Only replays user and assistant text messages. Tool calls, compactions,
- * and other entry types are skipped.
+ * Replays user messages, assistant text/thinking/tool-calls, and tool results
+ * to faithfully reconstruct the original session appearance in the ACP client.
+ * Non-message entries (compactions, branch summaries, model changes, etc.) are
+ * skipped.
  */
 export async function replaySessionHistory(
   session: AgentSession,
   sessionId: string,
   connection: AgentSideConnection,
 ): Promise<void> {
+  // Walk active branch from leaf to root — getEntries() returns ALL
+  // entries including abandoned branches, which would replay stale
+  // messages from earlier /tree navigations.
   const entries = session.sessionManager.getBranch();
   const updates: Promise<void>[] = [];
 
@@ -69,14 +74,11 @@ export async function replaySessionHistory(
     if (entry.type !== "message") continue;
 
     const message = entry.message;
-
     const role = message.role;
-    if (role !== "user" && role !== "assistant") continue;
-
-    const text = extractMessageText(message);
-    if (!text) continue;
 
     if (role === "user") {
+      const text = extractMessageText(message);
+      if (!text) continue;
       updates.push(
         connection.sessionUpdate({
           sessionId,
@@ -86,18 +88,147 @@ export async function replaySessionHistory(
           },
         }),
       );
-    } else {
+    } else if (role === "assistant") {
+      replayAssistantMessage(message as any, sessionId, connection, updates);
+    } else if (role === "toolResult") {
+      replayToolResult(message as any, sessionId, connection, updates);
+    }
+  }
+
+  await Promise.all(updates);
+}
+
+/** Emit thinking, tool-call, and text blocks from an assistant message. */
+function replayAssistantMessage(
+  message: any,
+  sessionId: string,
+  connection: AgentSideConnection,
+  updates: Promise<void>[],
+): void {
+  const content = message.content;
+  if (typeof content === "string") {
+    if (content.length > 0) {
       updates.push(
         connection.sessionUpdate({
           sessionId,
           update: {
             sessionUpdate: SessionUpdateType.AgentMessageChunk,
-            content: { type: "text", text },
+            content: { type: "text", text: content },
           },
         }),
       );
     }
+    return;
   }
 
-  await Promise.all(updates);
+  if (!Array.isArray(content)) return;
+
+  for (const block of content as any[]) {
+    if (!block || typeof block !== "object") continue;
+
+    if (block.type === "thinking") {
+      const thinking = block.thinking;
+      if (typeof thinking === "string" && thinking.length > 0) {
+        updates.push(
+          connection.sessionUpdate({
+            sessionId,
+            update: {
+              sessionUpdate: SessionUpdateType.AgentThoughtChunk,
+              content: { type: "text", text: thinking },
+            },
+          }),
+        );
+      }
+    } else if (block.type === "toolCall") {
+      const toolCallId = block.id;
+      const toolName = block.name;
+      const argsStr = safeStringify(block.arguments);
+      if (typeof toolCallId === "string" && typeof toolName === "string") {
+        updates.push(
+          connection.sessionUpdate({
+            sessionId,
+            update: {
+              sessionUpdate: SessionUpdateType.ToolCall,
+              toolCallId,
+              title: toolName,
+              status: "pending",
+              content: [
+                {
+                  type: "content" as const,
+                  content: { type: "text" as const, text: argsStr },
+                },
+              ],
+            },
+          }),
+        );
+      }
+    } else if (block.type === "text") {
+      const text = block.text;
+      if (typeof text === "string" && text.length > 0) {
+        updates.push(
+          connection.sessionUpdate({
+            sessionId,
+            update: {
+              sessionUpdate: SessionUpdateType.AgentMessageChunk,
+              content: { type: "text", text },
+            },
+          }),
+        );
+      }
+    }
+  }
+}
+
+/** Emit a tool_call_update for a completed tool result. */
+function replayToolResult(
+  message: any,
+  sessionId: string,
+  connection: AgentSideConnection,
+  updates: Promise<void>[],
+): void {
+  const toolCallId = message.toolCallId;
+  const isError = !!message.isError;
+  if (typeof toolCallId !== "string") return;
+
+  const resultText = extractTextFromToolResult(message.content);
+
+  updates.push(
+    connection.sessionUpdate({
+      sessionId,
+      update: {
+        sessionUpdate: SessionUpdateType.ToolCallUpdate,
+        toolCallId,
+        status: isError ? "failed" : "completed",
+        content: [
+          {
+            type: "content" as const,
+            content: { type: "text" as const, text: resultText },
+          },
+        ],
+      },
+    }),
+  );
+}
+
+/** Extract text from a tool result's content (string or content-block array). */
+function extractTextFromToolResult(content: unknown): string {
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return safeStringify(content);
+
+  const parts: string[] = [];
+  for (const block of content) {
+    if (block && typeof block === "object" && (block as Record<string, unknown>).type === "text") {
+      const text = (block as Record<string, unknown>).text;
+      if (typeof text === "string") parts.push(text);
+    }
+  }
+  return parts.length > 0 ? parts.join("") : safeStringify(content);
+}
+
+function safeStringify(value: unknown): string {
+  try {
+    return JSON.stringify(value, undefined, 2);
+  } catch {
+    return String(value);
+  }
 }

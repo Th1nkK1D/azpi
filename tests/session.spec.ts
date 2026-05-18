@@ -215,10 +215,129 @@ describe("replaySessionHistory", () => {
     });
   });
 
-  it("skips tool result messages", async () => {
+  it("replays thinking blocks as agent_thought_chunk", async () => {
+    const conn = createMockConnection();
+    const session = createMockSessionWithEntries([
+      {
+        type: "message",
+        message: {
+          role: "assistant",
+          content: [{ type: "thinking", thinking: "Let me think about this..." }],
+        },
+      },
+    ]);
+
+    await replaySessionHistory(session, "test-session", conn);
+
+    expect(conn.sessionUpdate).toHaveBeenCalledTimes(1);
+    expect(conn.sessionUpdate).toHaveBeenCalledWith({
+      sessionId: "test-session",
+      update: {
+        sessionUpdate: "agent_thought_chunk",
+        content: { type: "text", text: "Let me think about this..." },
+      },
+    });
+  });
+
+  it("replays tool call blocks as pending tool_call", async () => {
+    const conn = createMockConnection();
+    const session = createMockSessionWithEntries([
+      {
+        type: "message",
+        message: {
+          role: "assistant",
+          content: [{ type: "toolCall", id: "call_1", name: "read", arguments: { path: "/foo" } }],
+        },
+      },
+    ]);
+
+    await replaySessionHistory(session, "test-session", conn);
+
+    expect(conn.sessionUpdate).toHaveBeenCalledTimes(1);
+    const call = (conn.sessionUpdate.mock.calls as any[])[0][0];
+    expect(call.update.sessionUpdate).toBe("tool_call");
+    expect(call.update.toolCallId).toBe("call_1");
+    expect(call.update.title).toBe("read");
+    expect(call.update.status).toBe("pending");
+  });
+
+  it("replays mixed assistant content in order", async () => {
+    const conn = createMockConnection();
+    const session = createMockSessionWithEntries([
+      {
+        type: "message",
+        message: {
+          role: "assistant",
+          content: [
+            { type: "thinking", thinking: "I need to read a file." },
+            { type: "toolCall", id: "call_2", name: "read", arguments: { path: "/bar" } },
+            { type: "text", text: "Here is the result." },
+          ],
+        },
+      },
+    ]);
+
+    await replaySessionHistory(session, "test-session", conn);
+
+    expect(conn.sessionUpdate).toHaveBeenCalledTimes(3);
+    const calls = conn.sessionUpdate.mock.calls as any[];
+    expect(calls[0][0].update.sessionUpdate).toBe("agent_thought_chunk");
+    expect(calls[0][0].update.content.text).toBe("I need to read a file.");
+    expect(calls[1][0].update.sessionUpdate).toBe("tool_call");
+    expect(calls[1][0].update.toolCallId).toBe("call_2");
+    expect(calls[2][0].update.sessionUpdate).toBe("agent_message_chunk");
+    expect(calls[2][0].update.content.text).toBe("Here is the result.");
+  });
+
+  it("replays tool result messages as tool_call_update", async () => {
+    const conn = createMockConnection();
+    const session = createMockSessionWithEntries([
+      {
+        type: "message",
+        message: {
+          role: "toolResult",
+          toolCallId: "call_abc",
+          toolName: "read",
+          content: [{ type: "text", text: "file contents here" }],
+          isError: false,
+        },
+      },
+    ]);
+
+    await replaySessionHistory(session, "test-session", conn);
+
+    expect(conn.sessionUpdate).toHaveBeenCalledTimes(1);
+    const call = (conn.sessionUpdate.mock.calls as any[])[0][0];
+    expect(call.update.sessionUpdate).toBe("tool_call_update");
+    expect(call.update.toolCallId).toBe("call_abc");
+    expect(call.update.status).toBe("completed");
+    expect(call.update.content[0].content.text).toBe("file contents here");
+  });
+
+  it("replays tool result errors as failed", async () => {
+    const conn = createMockConnection();
+    const session = createMockSessionWithEntries([
+      {
+        type: "message",
+        message: {
+          role: "toolResult",
+          toolCallId: "call_err",
+          toolName: "bash",
+          content: [{ type: "text", text: "permission denied" }],
+          isError: true,
+        },
+      },
+    ]);
+
+    await replaySessionHistory(session, "test-session", conn);
+    expect((conn.sessionUpdate.mock.calls as any[])[0][0].update.status).toBe("failed");
+  });
+
+  it("skips messages with unknown roles", async () => {
     const conn = createMockConnection();
     const session = createMockSessionWithEntries([
       { type: "message", message: { role: "tool", content: "tool result" } },
+      { type: "message", message: { role: "custom", content: "custom" } },
     ]);
 
     await replaySessionHistory(session, "test-session", conn);
