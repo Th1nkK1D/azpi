@@ -56,7 +56,9 @@ export function convertPromptContent(
       case "resource": {
         const res = block.resource;
         if ("text" in res && typeof res.text === "string") {
-          textParts.push(`\`\`\`${res.mimeType ?? ""}\n${res.text}\n\`\`\``);
+          const lang = res.mimeType ?? "";
+          const uriHint = res.uri ? ` (${res.uri})` : "";
+          textParts.push(`\`\`\`${lang}${uriHint}\n${res.text}\n\`\`\``);
         } else if ("blob" in res && typeof res.blob === "string") {
           if (res.mimeType?.startsWith("image/")) {
             if (!supportsImage) {

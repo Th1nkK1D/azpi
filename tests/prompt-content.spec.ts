@@ -132,7 +132,7 @@ describe("convertPromptContent", () => {
       },
     ];
     const result = convertPromptContent(blocks, visionModel);
-    expect(result.text).toContain("```text/typescript");
+    expect(result.text).toContain("```text/typescript (file:///src/code.ts)");
     expect(result.text).toContain("const x = 1;");
     expect(result.images).toHaveLength(0);
   });
