@@ -331,6 +331,32 @@ describe("PiAcpAgent", () => {
       const result = await agent.unstable_resumeSession({ sessionId: "nonexistent", cwd: "" });
       expect(result).toEqual({});
     });
+
+    it("does not send startup message on resume", async () => {
+      const models = [createMockModel()];
+      const sessionId = "resume-no-startup";
+      const mockSession = createMockSession({
+        model: models[0],
+        sessionId,
+      });
+      const conn = createMockConnection();
+      const agent = new PiAcpAgent(conn, {
+        authStorage: createMockAuthStorage(),
+        modelRegistry: createMockRegistry(models) as any,
+        sessionFactory: async () => ({ session: mockSession }),
+      });
+
+      await agent.unstable_resumeSession({ sessionId, cwd: "" });
+
+      // startup message should not be sent — neither during resume nor as fallback in prompt()
+      const calls = conn.sessionUpdate.mock.calls as any[];
+      const startupCalls = calls.filter(
+        (call) =>
+          call[0].update.sessionUpdate === "agent_message_chunk" &&
+          (call[0].update.content.text as string).includes("**Session:**"),
+      );
+      expect(startupCalls.length).toBe(0);
+    });
   });
 
   describe("unstable_listSessions", () => {

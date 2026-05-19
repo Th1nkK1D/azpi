@@ -187,6 +187,7 @@ export class PiAcpAgent implements Agent {
       await replaySessionHistory(session, sessionId, this.connection);
     }
 
+    this.startupMessageSent.add(sessionId);
     this.safeNotify(() => this.discoverAndEmitCommands(sessionId));
 
     return {
@@ -201,9 +202,14 @@ export class PiAcpAgent implements Agent {
     const cwd = process.cwd();
     const sessionPath = await this.sessionResolver.resolveSessionPath(cwd, sessionId);
 
-    await this.createAndRegisterSession({ cwd, sessionId, sessionPath });
+    const { session } = await this.createAndRegisterSession({ cwd, sessionId, sessionPath });
 
-    // Return without replaying history
+    this.startupMessageSent.add(sessionId);
+
+    if (sessionPath) {
+      await replaySessionHistory(session, sessionId, this.connection);
+    }
+
     return {};
   }
 
