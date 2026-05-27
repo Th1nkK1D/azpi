@@ -19,12 +19,29 @@ export function buildStartupMessage({ resourceLoader }: AgentSession): string {
     getSortedBulletList(agentsFiles, (f) => f.path),
     "",
     "**Extensions:**",
-    getSortedBulletList(extensions, (e) => e.sourceInfo.source),
+    getSortedBulletList(dedupeExtensions(extensions), (e) => e),
     "",
     "**Skills:**",
     getSortedBulletList(skills, (s) => s.name),
     "",
   ].join("\n");
+}
+
+/**
+ * Deduplicate extensions by package source, returning unique source labels.
+ * When a package provides multiple extension entry points, only the first is kept.
+ */
+function dedupeExtensions(extensions: Array<{ sourceInfo: { source: string } }>): string[] {
+  const seen = new Set<string>();
+  const labels: string[] = [];
+  for (const ext of extensions) {
+    const source = ext.sourceInfo.source;
+    if (!seen.has(source)) {
+      seen.add(source);
+      labels.push(source);
+    }
+  }
+  return labels;
 }
 
 function getSortedBulletList<T>(items: T[], getLabel: (item: T) => string): string {

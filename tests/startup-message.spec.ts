@@ -99,6 +99,70 @@ describe("buildStartupMessage", () => {
     expect(result).toContain("npm:@tomooshi/caveman-milk-pi");
   });
 
+  it("deduplicates extensions from the same package source", () => {
+    const session = createMockSession({
+      getExtensions: () => ({
+        extensions: [
+          {
+            path: "/ext/guardrails/path-access/index.ts",
+            resolvedPath: "/ext/guardrails/path-access/index.ts",
+            sourceInfo: {
+              path: "/ext/guardrails/path-access/index.ts",
+              source: "npm:@aliou/pi-guardrails",
+              scope: "user",
+              origin: "package",
+            },
+            handlers: new Map(),
+            tools: new Map(),
+            messageRenderers: new Map(),
+            commands: new Map(),
+            flags: new Map(),
+            shortcuts: new Map(),
+          },
+          {
+            path: "/ext/guardrails/guardrails/index.ts",
+            resolvedPath: "/ext/guardrails/guardrails/index.ts",
+            sourceInfo: {
+              path: "/ext/guardrails/guardrails/index.ts",
+              source: "npm:@aliou/pi-guardrails",
+              scope: "user",
+              origin: "package",
+            },
+            handlers: new Map(),
+            tools: new Map(),
+            messageRenderers: new Map(),
+            commands: new Map(),
+            flags: new Map(),
+            shortcuts: new Map(),
+          },
+          {
+            path: "/ext/guardrails/permission-gate/index.ts",
+            resolvedPath: "/ext/guardrails/permission-gate/index.ts",
+            sourceInfo: {
+              path: "/ext/guardrails/permission-gate/index.ts",
+              source: "npm:@aliou/pi-guardrails",
+              scope: "user",
+              origin: "package",
+            },
+            handlers: new Map(),
+            tools: new Map(),
+            messageRenderers: new Map(),
+            commands: new Map(),
+            flags: new Map(),
+            shortcuts: new Map(),
+          },
+        ],
+        errors: [],
+        runtime: {} as any,
+      }),
+    });
+    const result = buildStartupMessage(session);
+    // Should only appear once, not three times
+    const matches = result.match(/npm:@aliou\/pi-guardrails/g);
+    expect(matches).not.toBeNull();
+    expect(matches!.length).toBe(1);
+  });
+
   it("shows none when no extensions", () => {
     const session = createMockSession({
       getExtensions: () => ({ extensions: [], errors: [], runtime: {} as any }),
