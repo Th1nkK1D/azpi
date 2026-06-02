@@ -1168,3 +1168,152 @@ describe("error handling", () => {
     expect(msgCalls.length).toBe(0);
   });
 });
+
+describe("notification drain on agent_end", () => {
+  it("resolves prompt only after all sessionUpdate notifications flushed", async () => {
+    const models = [createMockModel()];
+    const mockSession = createMockSession({ model: models[0] });
+
+    const sessionUpdateDeferreds: Array<() => void> = [];
+
+    // sessionUpdate that tracks completion — each call adds a deferred
+    const sessionUpdate = mock(async () => {
+      await new Promise<void>((resolve) => {
+        sessionUpdateDeferreds.push(resolve);
+      });
+    });
+
+    const conn = {
+      closed: Promise.resolve(),
+      extMethod: mock(async () => ({})),
+      extNotification: mock(async () => {}),
+      requestPermission: mock(async () => ({ action: "allow" as const })),
+      sessionUpdate,
+      signal: new AbortController().signal,
+    } as unknown as AgentSideConnection & { sessionUpdate: typeof sessionUpdate };
+
+    const agent = new PiAcpAgent(conn, {
+      authStorage: createMockAuthStorage(),
+      modelRegistry: createMockRegistry(models) as any,
+      sessionFactory: async () => ({ session: mockSession }),
+    });
+
+    const newResult = await agent.newSession(newSessionReq());
+    await new Promise((r) => setImmediate(r));
+    // Resolve deferreds from newSession (startup message + command discovery)
+    // so they don't leak into the test and trigger prompt() fallbacks
+    for (const resolve of sessionUpdateDeferreds.splice(0)) {
+      resolve();
+    }
+    // Drain the notification gate so prompt() doesn't re-send fallbacks
+    await agent["notificationDrainGate"];
+    sessionUpdate.mockClear?.();
+
+    const subscribers = (mockSession as any)._subscribers as Array<(event: any) => void>;
+
+    // Fire text_delta events — each triggers a sessionUpdate that blocks on a deferred
+    subscribers.forEach((sub) =>
+      sub({
+        type: "message_update",
+        assistantMessageEvent: { type: "text_delta", delta: "chunk1" },
+      }),
+    );
+    subscribers.forEach((sub) =>
+      sub({
+        type: "message_update",
+        assistantMessageEvent: { type: "text_delta", delta: "chunk2" },
+      }),
+    );
+
+    // Start prompt — will wait for agent_end to resolve
+    const promptPromise = agent.prompt(promptReq(newResult.sessionId, "test"));
+
+    // Let microtasks flush so sessionUpdate calls are started
+    await new Promise((r) => setTimeout(r, 5));
+
+    // Verify sessionUpdates were started (blocked on deferreds)
+    expect(sessionUpdateDeferreds.length).toBe(2);
+
+    // Fire agent_end — should NOT resolve prompt yet because sessionUpdates still pending
+    subscribers.forEach((sub) =>
+      sub({
+        type: "agent_end",
+        messages: [{ role: "assistant", stopReason: "end_turn", content: "done" }],
+      }),
+    );
+
+    // Wait a tick — prompt should still be pending
+    await new Promise((r) => setTimeout(r, 5));
+
+    let promptResolved = false;
+    promptPromise.then(() => {
+      promptResolved = true;
+    });
+
+    // Prompt should NOT have resolved yet (notifications still in-flight)
+    expect(promptResolved).toBe(false);
+
+    // Resolve the blocked text_delta sessionUpdates
+    for (const resolve of sessionUpdateDeferreds.splice(0)) {
+      resolve();
+    }
+
+    // agent_end handler also fires session_info_update — resolve that too
+    await new Promise((r) => setTimeout(r, 5));
+    for (const resolve of sessionUpdateDeferreds.splice(0)) {
+      resolve();
+    }
+
+    // Now prompt should resolve
+    const result = await promptPromise;
+    expect(result.stopReason).toBe("end_turn");
+    expect(promptResolved).toBe(true);
+  });
+
+  it("resolves prompt with cancelled when cancel arrives before drain completes", async () => {
+    const models = [createMockModel()];
+    const mockSession = createMockSession({ model: models[0] });
+
+    // sessionUpdate that never resolves (simulates slow network)
+    const sessionUpdate = mock(async () => {
+      await new Promise(() => {}); // never resolves
+    });
+
+    const conn = {
+      closed: Promise.resolve(),
+      extMethod: mock(async () => ({})),
+      extNotification: mock(async () => {}),
+      requestPermission: mock(async () => ({ action: "allow" as const })),
+      sessionUpdate,
+      signal: new AbortController().signal,
+    } as unknown as AgentSideConnection & { sessionUpdate: typeof sessionUpdate };
+
+    const agent = new PiAcpAgent(conn, {
+      authStorage: createMockAuthStorage(),
+      modelRegistry: createMockRegistry(models) as any,
+      sessionFactory: async () => ({ session: mockSession }),
+    });
+
+    const newResult = await agent.newSession(newSessionReq());
+    await new Promise((r) => setImmediate(r));
+
+    const subscribers = (mockSession as any)._subscribers as Array<(event: any) => void>;
+
+    // Fire text_delta to queue a blocked sessionUpdate
+    subscribers.forEach((sub) =>
+      sub({
+        type: "message_update",
+        assistantMessageEvent: { type: "text_delta", delta: "chunk" },
+      }),
+    );
+
+    const promptPromise = agent.prompt(promptReq(newResult.sessionId, "test"));
+    await new Promise((r) => setTimeout(r, 5));
+
+    // Cancel before drain completes — should resolve with cancelled
+    await agent.cancel({ sessionId: newResult.sessionId });
+
+    const result = await promptPromise;
+    expect(result.stopReason).toBe("cancelled");
+  });
+});

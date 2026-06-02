@@ -90,6 +90,7 @@ export class PiAcpAgent implements Agent {
   private sessionResolver = new SessionResolver();
   private commandsAdvertised = new Set<string>();
   private startupMessageSent = new Set<string>();
+  private notificationDrainGate: Promise<unknown> = Promise.resolve();
 
   readonly options: PiAcpAgentOptions;
   readonly connection: AgentSideConnection;
@@ -579,21 +580,31 @@ export class PiAcpAgent implements Agent {
       const lastMessage = event.messages[event.messages.length - 1];
       const stopReason = mapStopReason(lastMessage);
 
-      const pending = this.pendingPrompts.get(sessionId);
-      if (pending) {
-        this.pendingPrompts.delete(sessionId);
-        pending.resolve({ stopReason });
-      }
-
-      this.safeNotify(() =>
-        this.connection.sessionUpdate({
-          sessionId,
-          update: {
-            sessionUpdate: SessionUpdateType.SessionInfoUpdate,
-            updatedAt: new Date().toISOString(),
-          },
-        }),
-      );
+      // Drain all in-flight session/update notifications BEFORE resolving
+      // the prompt RPC response. The ACP spec requires that all notifications
+      // for a turn be sent before the terminal session/prompt response.
+      // Without this drain, agent_message_chunk frames race past end_turn
+      // while the final text is still streaming.
+      this.notificationDrainGate
+        .then(() =>
+          this.connection.sessionUpdate({
+            sessionId,
+            update: {
+              sessionUpdate: SessionUpdateType.SessionInfoUpdate,
+              updatedAt: new Date().toISOString(),
+            },
+          }),
+        )
+        .catch(() => {
+          // Connection may be closing; ignore
+        })
+        .finally(() => {
+          const pending = this.pendingPrompts.get(sessionId);
+          if (pending) {
+            this.pendingPrompts.delete(sessionId);
+            pending.resolve({ stopReason });
+          }
+        });
     }
   }
 
@@ -626,8 +637,10 @@ export class PiAcpAgent implements Agent {
   }
 
   private safeNotify(fn: () => Promise<void>): void {
-    fn().catch(() => {
+    const promise = fn().catch(() => {
       // Connection may be closing; ignore
     });
+    // Chain into drain gate so agent_end can await all pending writes
+    this.notificationDrainGate = Promise.allSettled([this.notificationDrainGate, promise]);
   }
 }
