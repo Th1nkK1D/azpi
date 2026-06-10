@@ -24,8 +24,8 @@ import type {
   SessionNotification,
   SetSessionConfigOptionRequest,
   SetSessionConfigOptionResponse,
-  SetSessionModelRequest,
-  SetSessionModelResponse,
+  SetSessionModeRequest,
+  SetSessionModeResponse,
 } from "@agentclientprotocol/sdk";
 import {
   AuthStorage,
@@ -49,7 +49,7 @@ import {
 } from "./prompt-content";
 import {
   buildModelConfigOption,
-  buildModelState,
+  buildModeState,
   buildThinkingLevelConfigOption,
   resolveModelById,
 } from "./model";
@@ -171,7 +171,7 @@ export class PiAcpAgent implements Agent {
 
     return {
       sessionId,
-      models: session.model ? buildModelState(this.availableModels, session.model) : undefined,
+      modes: session.model ? buildModeState(this.availableModels, session.model) : undefined,
       configOptions: this.buildConfigOptions(session),
     };
   }
@@ -192,7 +192,7 @@ export class PiAcpAgent implements Agent {
     this.safeNotify(() => this.discoverAndEmitCommands(sessionId));
 
     return {
-      models: session.model ? buildModelState(this.availableModels, session.model) : undefined,
+      modes: session.model ? buildModeState(this.availableModels, session.model) : undefined,
       configOptions: this.buildConfigOptions(session),
     };
   }
@@ -232,12 +232,12 @@ export class PiAcpAgent implements Agent {
     return { sessions };
   }
 
-  async unstable_setSessionModel({
+  async setSessionMode({
     sessionId,
-    modelId,
-  }: SetSessionModelRequest): Promise<SetSessionModelResponse> {
+    modeId,
+  }: SetSessionModeRequest): Promise<SetSessionModeResponse> {
     const session = this.getSessionOrThrow(sessionId);
-    const model = resolveModelById(this.modelRegistry, modelId);
+    const model = resolveModelById(this.modelRegistry, modeId);
 
     try {
       await session.setModel(model);

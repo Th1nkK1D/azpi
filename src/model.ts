@@ -1,5 +1,5 @@
 import { RequestError } from "@agentclientprotocol/sdk";
-import type { SessionModelState, SessionConfigOption } from "@agentclientprotocol/sdk";
+import type { SessionModeState, SessionConfigOption } from "@agentclientprotocol/sdk";
 import type { Model } from "@earendil-works/pi-ai";
 import type { AgentSession, ModelRegistry } from "@earendil-works/pi-coding-agent";
 
@@ -7,16 +7,16 @@ type SessionConfigWithOptions = SessionConfigOption & {
   options: { value: string; name: string }[];
 };
 
-export function buildModelState(
+export function buildModeState(
   availableModels: Model<any>[],
   currentModel?: Model<any>,
-): SessionModelState {
+): SessionModeState {
   return {
-    availableModels: availableModels.map(({ provider, id, name }) => ({
-      modelId: `${provider}/${id}`,
+    availableModes: availableModels.map(({ provider, id, name }) => ({
+      id: `${provider}/${id}`,
       name,
     })),
-    currentModelId: currentModel ? `${currentModel.provider}/${currentModel.id}` : "",
+    currentModeId: currentModel ? `${currentModel.provider}/${currentModel.id}` : "",
   };
 }
 

@@ -4,7 +4,7 @@ import type { AgentSession, ModelRegistry } from "@earendil-works/pi-coding-agen
 import type { Model } from "@earendil-works/pi-ai";
 import {
   buildModelConfigOption,
-  buildModelState,
+  buildModeState,
   buildThinkingLevelConfigOption,
   resolveModelById,
 } from "../src/model";
@@ -40,27 +40,27 @@ function createMockSession(overrides?: Partial<AgentSession>): AgentSession {
   } as unknown as AgentSession;
 }
 
-describe("buildModelState", () => {
-  it("maps available models to ACP model list", () => {
+describe("buildModeState", () => {
+  it("maps available models to ACP mode list", () => {
     const models = [
       createMockModel({ provider: "openai", id: "gpt-4", name: "GPT-4" }),
       createMockModel({ provider: "anthropic", id: "claude-3", name: "Claude 3" }),
     ];
-    const state = buildModelState(models);
-    expect(state.availableModels).toHaveLength(2);
-    expect(state.availableModels[0]).toEqual({ modelId: "openai/gpt-4", name: "GPT-4" });
-    expect(state.availableModels[1]).toEqual({ modelId: "anthropic/claude-3", name: "Claude 3" });
+    const state = buildModeState(models);
+    expect(state.availableModes).toHaveLength(2);
+    expect(state.availableModes[0]).toEqual({ id: "openai/gpt-4", name: "GPT-4" });
+    expect(state.availableModes[1]).toEqual({ id: "anthropic/claude-3", name: "Claude 3" });
   });
 
-  it("sets currentModelId when currentModel provided", () => {
+  it("sets currentModeId when currentModel provided", () => {
     const current = createMockModel({ provider: "openai", id: "gpt-4" });
-    const state = buildModelState([], current);
-    expect(state.currentModelId).toBe("openai/gpt-4");
+    const state = buildModeState([], current);
+    expect(state.currentModeId).toBe("openai/gpt-4");
   });
 
-  it("uses empty string for currentModelId when no currentModel", () => {
-    const state = buildModelState([]);
-    expect(state.currentModelId).toBe("");
+  it("uses empty string for currentModeId when no currentModel", () => {
+    const state = buildModeState([]);
+    expect(state.currentModeId).toBe("");
   });
 });
 

@@ -232,8 +232,8 @@ describe("PiAcpAgent", () => {
 
       const result = await agent.newSession(newSessionReq());
       expect(result.sessionId).toBeDefined();
-      expect(result.models).toBeDefined();
-      expect(result.models!.currentModelId).toBe("openai/gpt-4");
+      expect(result.modes).toBeDefined();
+      expect(result.modes!.currentModeId).toBe("openai/gpt-4");
       expect(result.configOptions).toBeDefined();
       expect(result.configOptions).toHaveLength(2);
       expect(result.configOptions![0]!.id).toBe("model");
@@ -291,8 +291,8 @@ describe("PiAcpAgent", () => {
       });
 
       const result = await agent.newSession(newSessionReq());
-      expect(result.models).toBeDefined();
-      expect(result.models!.currentModelId).toBe("anthropic/claude-3");
+      expect(result.modes).toBeDefined();
+      expect(result.modes!.currentModeId).toBe("anthropic/claude-3");
       expect(mockSession.setModel).toHaveBeenCalled();
     });
   });
@@ -374,7 +374,7 @@ describe("PiAcpAgent", () => {
     });
   });
 
-  describe("unstable_setSessionModel", () => {
+  describe("setSessionMode", () => {
     it("changes the model and sends config_option_update", async () => {
       const mockSession = createMockSession();
       const models = [
@@ -389,9 +389,9 @@ describe("PiAcpAgent", () => {
       });
 
       const newSessionResult = await agent.newSession(newSessionReq());
-      const result = await agent.unstable_setSessionModel({
+      const result = await agent.setSessionMode({
         sessionId: newSessionResult.sessionId,
-        modelId: "anthropic/claude-3",
+        modeId: "anthropic/claude-3",
       });
 
       expect(result).toEqual({});
@@ -415,9 +415,9 @@ describe("PiAcpAgent", () => {
 
       await agent.newSession(newSessionReq());
       expect(
-        agent.unstable_setSessionModel({
+        agent.setSessionMode({
           sessionId: "test-session",
-          modelId: "unknown/model",
+          modeId: "unknown/model",
         }),
       ).rejects.toBeInstanceOf(RequestError);
     });
@@ -434,9 +434,9 @@ describe("PiAcpAgent", () => {
 
       await agent.newSession(newSessionReq());
       expect(
-        agent.unstable_setSessionModel({
+        agent.setSessionMode({
           sessionId: "test-session",
-          modelId: "no-slash",
+          modeId: "no-slash",
         }),
       ).rejects.toBeInstanceOf(RequestError);
     });
@@ -1068,7 +1068,7 @@ describe("error handling", () => {
     expect(msgCalls[0][0].update.content.text).toBe("❌ Error: [object Object]");
   });
 
-  it("unstable_setSessionModel sends error message and rethrows on setModel failure", async () => {
+  it("setSessionMode sends error message and rethrows on setModel failure", async () => {
     const models = [
       createMockModel({ provider: "openai", id: "gpt-4", name: "GPT-4" }),
       createMockModel({ provider: "anthropic", id: "claude-3", name: "Claude 3" }),
@@ -1091,9 +1091,9 @@ describe("error handling", () => {
     conn.sessionUpdate.mockClear?.();
 
     await expect(
-      agent.unstable_setSessionModel({
+      agent.setSessionMode({
         sessionId: newResult.sessionId,
-        modelId: "anthropic/claude-3",
+        modeId: "anthropic/claude-3",
       }),
     ).rejects.toThrow("Model API key invalid");
 
