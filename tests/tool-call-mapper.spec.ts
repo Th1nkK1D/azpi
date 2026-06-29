@@ -14,6 +14,7 @@ describe("tool-mapper", () => {
       expect(result.toolCallId).toBe("tc-1");
       expect(result.title).toBe("bash");
       expect(result.status).toBe("pending");
+      expect(result.rawInput).toEqual({ command: "echo hello" });
       expect(result.content).toHaveLength(1);
       expect(result.content![0]!.type).toBe("content");
       expect((result.content![0] as any).content.text).toContain("echo hello");

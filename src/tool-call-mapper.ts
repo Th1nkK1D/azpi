@@ -13,6 +13,7 @@ export function mapToolCallStart(event: AgentEvent & { type: "tool_execution_sta
         type: "content",
       },
     ],
+    rawInput: event.args,
     status: "pending",
     title: event.toolName,
     toolCallId: event.toolCallId,
