@@ -362,7 +362,7 @@ describe("generateSessionName", () => {
     const mockCompleteSimple = mock().mockResolvedValue({
       content: [{ type: "text", text: "Fix auth middleware" }],
     });
-    mock.module("@earendil-works/pi-ai", () => ({
+    mock.module("@earendil-works/pi-ai/compat", () => ({
       completeSimple: mockCompleteSimple,
     }));
 
@@ -381,7 +381,7 @@ describe("generateSessionName", () => {
 
   it("truncates result longer than MAX_SESSION_NAME_LENGTH characters", async () => {
     const longName = "a".repeat(80);
-    mock.module("@earendil-works/pi-ai", () => ({
+    mock.module("@earendil-works/pi-ai/compat", () => ({
       completeSimple: mock().mockResolvedValue({
         content: [{ type: "text", text: longName }],
       }),
@@ -392,7 +392,7 @@ describe("generateSessionName", () => {
   });
 
   it("returns undefined when response has no text content", async () => {
-    mock.module("@earendil-works/pi-ai", () => ({
+    mock.module("@earendil-works/pi-ai/compat", () => ({
       completeSimple: mock().mockResolvedValue({
         content: [{ type: "thinking", thinking: "hmm" }],
       }),
@@ -403,7 +403,7 @@ describe("generateSessionName", () => {
   });
 
   it("returns undefined for empty text response", async () => {
-    mock.module("@earendil-works/pi-ai", () => ({
+    mock.module("@earendil-works/pi-ai/compat", () => ({
       completeSimple: mock().mockResolvedValue({
         content: [{ type: "text", text: "  " }],
       }),
@@ -417,7 +417,7 @@ describe("generateSessionName", () => {
     const mockCompleteSimple = mock().mockResolvedValue({
       content: [{ type: "text", text: "Short name" }],
     });
-    mock.module("@earendil-works/pi-ai", () => ({
+    mock.module("@earendil-works/pi-ai/compat", () => ({
       completeSimple: mockCompleteSimple,
     }));
 
@@ -432,7 +432,7 @@ describe("generateSessionName", () => {
     const mockCompleteSimple = mock().mockResolvedValue({
       content: [{ type: "text", text: "Name" }],
     });
-    mock.module("@earendil-works/pi-ai", () => ({
+    mock.module("@earendil-works/pi-ai/compat", () => ({
       completeSimple: mockCompleteSimple,
     }));
 

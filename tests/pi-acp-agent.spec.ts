@@ -9,7 +9,7 @@ import type {
 import { PiAcpAgent } from "../src/pi-acp-agent";
 import type { AgentSession } from "@earendil-works/pi-coding-agent";
 import type { Model } from "@earendil-works/pi-ai";
-import * as realPiAi from "@earendil-works/pi-ai";
+import * as realPiAiCompat from "@earendil-works/pi-ai/compat";
 
 function createMockConnection(): AgentSideConnection & {
   sessionUpdate: ReturnType<typeof mock>;
@@ -712,8 +712,8 @@ describe("PiAcpAgent", () => {
       const mockCompleteSimple = mock(async () => ({
         content: [{ type: "text", text: "LLM Generated Name" }],
       }));
-      mock.module("@earendil-works/pi-ai", () => ({
-        ...realPiAi,
+      mock.module("@earendil-works/pi-ai/compat", () => ({
+        ...realPiAiCompat,
         completeSimple: mockCompleteSimple,
       }));
 
@@ -736,7 +736,7 @@ describe("PiAcpAgent", () => {
       expect(mockSession.setSessionName).toHaveBeenCalledWith("LLM Generated Name");
 
       delete process.env.AZPI_SESSION_NAMING_MODEL;
-      mock.module("@earendil-works/pi-ai", () => realPiAi);
+      mock.module("@earendil-works/pi-ai/compat", () => realPiAiCompat);
     });
 
     it("falls back to deriveSessionName when AZPI_SESSION_NAMING_MODEL fails", async () => {

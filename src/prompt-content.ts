@@ -1,6 +1,6 @@
 import { RequestError } from "@agentclientprotocol/sdk";
 import type { ContentBlock } from "@agentclientprotocol/sdk";
-import { completeSimple } from "@earendil-works/pi-ai";
+import { completeSimple } from "@earendil-works/pi-ai/compat";
 import type { Model, ImageContent } from "@earendil-works/pi-ai";
 
 export const MAX_SESSION_NAME_LENGTH = 60;
