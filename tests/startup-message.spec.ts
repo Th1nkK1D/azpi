@@ -233,4 +233,142 @@ describe("buildStartupMessage", () => {
     expect(result).toContain("grill-me");
     expect(result.toLowerCase().match(/none/g)!.length).toBeGreaterThanOrEqual(1);
   });
+
+  it("shows folder name for auto-discovered extensions in subdirectories", () => {
+    const session = createMockSession({
+      getExtensions: () => ({
+        extensions: [
+          {
+            path: "/home/user/.pi/agent/extensions/my-extension/index.ts",
+            resolvedPath: "/home/user/.pi/agent/extensions/my-extension/index.ts",
+            sourceInfo: {
+              path: "/home/user/.pi/agent/extensions/my-extension/index.ts",
+              source: "auto",
+              scope: "user",
+              origin: "top-level",
+            },
+            handlers: new Map(),
+            tools: new Map(),
+            messageRenderers: new Map(),
+            commands: new Map(),
+            flags: new Map(),
+            shortcuts: new Map(),
+          },
+        ],
+        errors: [],
+        runtime: {} as any,
+      }),
+    });
+    const result = buildStartupMessage(session);
+    expect(result).toContain("my-extension");
+    expect(result).not.toContain("auto");
+  });
+
+  it("shows filename for auto-discovered single-file extensions", () => {
+    const session = createMockSession({
+      getExtensions: () => ({
+        extensions: [
+          {
+            path: "/home/user/.pi/agent/extensions/condensed-milk.ts",
+            resolvedPath: "/home/user/.pi/agent/extensions/condensed-milk.ts",
+            sourceInfo: {
+              path: "/home/user/.pi/agent/extensions/condensed-milk.ts",
+              source: "auto",
+              scope: "user",
+              origin: "top-level",
+            },
+            handlers: new Map(),
+            tools: new Map(),
+            messageRenderers: new Map(),
+            commands: new Map(),
+            flags: new Map(),
+            shortcuts: new Map(),
+          },
+        ],
+        errors: [],
+        runtime: {} as any,
+      }),
+    });
+    const result = buildStartupMessage(session);
+    expect(result).toContain("condensed-milk");
+    expect(result).not.toContain("auto");
+  });
+
+  it("shows folder name for project-local auto-discovered extensions", () => {
+    const session = createMockSession({
+      getExtensions: () => ({
+        extensions: [
+          {
+            path: "/project/.pi/extensions/custom-tool/index.ts",
+            resolvedPath: "/project/.pi/extensions/custom-tool/index.ts",
+            sourceInfo: {
+              path: "/project/.pi/extensions/custom-tool/index.ts",
+              source: "auto",
+              scope: "project",
+              origin: "top-level",
+            },
+            handlers: new Map(),
+            tools: new Map(),
+            messageRenderers: new Map(),
+            commands: new Map(),
+            flags: new Map(),
+            shortcuts: new Map(),
+          },
+        ],
+        errors: [],
+        runtime: {} as any,
+      }),
+    });
+    const result = buildStartupMessage(session);
+    expect(result).toContain("custom-tool");
+    expect(result).not.toContain("auto");
+  });
+
+  it("deduplicates auto-discovered extensions with same folder name", () => {
+    const session = createMockSession({
+      getExtensions: () => ({
+        extensions: [
+          {
+            path: "/home/user/.pi/agent/extensions/my-ext/tool.ts",
+            resolvedPath: "/home/user/.pi/agent/extensions/my-ext/tool.ts",
+            sourceInfo: {
+              path: "/home/user/.pi/agent/extensions/my-ext/tool.ts",
+              source: "auto",
+              scope: "user",
+              origin: "top-level",
+            },
+            handlers: new Map(),
+            tools: new Map(),
+            messageRenderers: new Map(),
+            commands: new Map(),
+            flags: new Map(),
+            shortcuts: new Map(),
+          },
+          {
+            path: "/home/user/.pi/agent/extensions/my-ext/helper.ts",
+            resolvedPath: "/home/user/.pi/agent/extensions/my-ext/helper.ts",
+            sourceInfo: {
+              path: "/home/user/.pi/agent/extensions/my-ext/helper.ts",
+              source: "auto",
+              scope: "user",
+              origin: "top-level",
+            },
+            handlers: new Map(),
+            tools: new Map(),
+            messageRenderers: new Map(),
+            commands: new Map(),
+            flags: new Map(),
+            shortcuts: new Map(),
+          },
+        ],
+        errors: [],
+        runtime: {} as any,
+      }),
+    });
+    const result = buildStartupMessage(session);
+    // Should only appear once
+    const matches = result.match(/my-ext/g);
+    expect(matches).not.toBeNull();
+    expect(matches!.length).toBe(1);
+  });
 });

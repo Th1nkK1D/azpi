@@ -30,18 +30,47 @@ export function buildStartupMessage({ resourceLoader }: AgentSession): string {
 /**
  * Deduplicate extensions by package source, returning unique source labels.
  * When a package provides multiple extension entry points, only the first is kept.
+ * For auto-discovered extensions (source: "auto"), derives a label from the file path.
  */
-function dedupeExtensions(extensions: Array<{ sourceInfo: { source: string } }>): string[] {
+function dedupeExtensions(
+  extensions: Array<{ sourceInfo: { source: string; path?: string } }>,
+): string[] {
   const seen = new Set<string>();
   const labels: string[] = [];
   for (const ext of extensions) {
     const source = ext.sourceInfo.source;
-    if (!seen.has(source)) {
-      seen.add(source);
-      labels.push(source);
+    // For auto-discovered extensions, derive a readable label from the path
+    const label = source === "auto" ? getAutoExtensionLabel(ext.sourceInfo.path) : source;
+    if (!seen.has(label)) {
+      seen.add(label);
+      labels.push(label);
     }
   }
   return labels;
+}
+
+/**
+ * Derive a human-readable label for auto-discovered extensions from their path.
+ * Examples:
+ *   ~/.pi/agent/extensions/my-extension.ts -> "my-extension"
+ *   ~/.pi/agent/extensions/my-extension/index.ts -> "my-extension"
+ *   .pi/extensions/foo.ts -> "foo"
+ */
+function getAutoExtensionLabel(path: string | undefined): string {
+  if (!path) return "auto";
+
+  const parts = path.replace(/\\/g, "/").split("/");
+  const extDirIdx = parts.findIndex((p) => p === "extensions");
+
+  if (extDirIdx >= 0 && extDirIdx < parts.length - 1) {
+    const nextPart = parts[extDirIdx + 1]!;
+    if (nextPart.includes(".")) {
+      return nextPart.replace(/\.[^.]+$/, "");
+    }
+    return nextPart;
+  }
+
+  return parts[parts.length - 1]?.replace(/\.[^.]+$/, "") ?? "auto";
 }
 
 function getSortedBulletList<T>(items: T[], getLabel: (item: T) => string): string {
