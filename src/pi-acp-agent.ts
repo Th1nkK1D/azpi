@@ -353,7 +353,12 @@ export class PiAcpAgent implements Agent {
         // Extension commands bypass the agent loop (no agent_start/agent_end).
         // Pass to Pi which routes to the handler. Output flows via
         // the notify() bridge (agent_message_chunk) and/or pi.sendMessage().
-        await session.prompt(text, images.length > 0 ? { images } : undefined);
+        try {
+          await session.prompt(text, images.length > 0 ? { images } : undefined);
+        } catch (error: unknown) {
+          const message = error instanceof Error ? error.message : String(error);
+          this.notifyError(sessionId, message);
+        }
 
         return { stopReason: "end_turn" };
       }

@@ -1167,6 +1167,61 @@ describe("error handling", () => {
     );
     expect(msgCalls.length).toBe(0);
   });
+
+  it("sends error message when extension command fails", async () => {
+    const models = [createMockModel()];
+    const mockExtensionRunner = {
+      getRegisteredCommands: () => [
+        {
+          name: "deploy",
+          invocationName: "deploy",
+          description: "Deploy the app",
+          sourceInfo: { path: "d.ts", source: "ext", scope: "user", origin: "top-level" },
+          handler: async () => {},
+        },
+      ],
+    };
+    const mockSession = createMockSession({
+      model: models[0],
+      extensionRunner: mockExtensionRunner as any,
+      prompt: mock(async () => {
+        throw new Error("Extension execution failed: timeout");
+      }),
+    });
+    const conn = createMockConnection();
+    const agent = new PiAcpAgent(conn, {
+      authStorage: createMockAuthStorage(),
+      modelRegistry: createMockRegistry(models) as any,
+      sessionFactory: async () => ({ session: mockSession }),
+    });
+
+    const prevEnv = process.env.AZPI_ALLOW_EXTENSION_COMMANDS;
+    process.env.AZPI_ALLOW_EXTENSION_COMMANDS = "*";
+    try {
+      const newResult = await agent.newSession(newSessionReq());
+      await new Promise((r) => setImmediate(r));
+      conn.sessionUpdate.mockClear?.();
+
+      const result = await agent.prompt(promptReq(newResult.sessionId, "/deploy"));
+
+      expect(result.stopReason).toBe("end_turn");
+
+      const calls = conn.sessionUpdate.mock.calls as any[];
+      const msgCalls = calls.filter(
+        (call) => call[0].update.sessionUpdate === "agent_message_chunk",
+      );
+      expect(msgCalls.length).toBe(1);
+      expect(msgCalls[0][0].update.content.text).toBe(
+        "❌ Error: Extension execution failed: timeout",
+      );
+    } finally {
+      if (prevEnv !== undefined) {
+        process.env.AZPI_ALLOW_EXTENSION_COMMANDS = prevEnv;
+      } else {
+        delete process.env.AZPI_ALLOW_EXTENSION_COMMANDS;
+      }
+    }
+  });
 });
 
 describe("notification drain on agent_end", () => {
