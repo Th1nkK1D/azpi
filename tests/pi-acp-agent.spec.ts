@@ -85,6 +85,9 @@ function createMockSession(overrides?: Partial<AgentSession>): AgentSession {
     dispose: mock(() => {}),
     resourceLoader: mockResourceLoader,
     sessionManager: mockSessionManager,
+    agent: {
+      waitForIdle: mock(async () => {}),
+    },
     _subscribers: subscribers,
     ...overrides,
   } as unknown as AgentSession;

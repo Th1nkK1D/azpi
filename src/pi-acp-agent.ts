@@ -397,6 +397,8 @@ export class PiAcpAgent implements Agent {
 
     const pending = this.pendingPrompts.get(sessionId);
     if (pending) {
+      // session.abort() waits for agent idle (finishRun) before returning,
+      // so isStreaming is false by the time we resolve.
       await session.abort();
       this.pendingPrompts.delete(sessionId);
       pending.resolve({ stopReason: "cancelled" });
@@ -558,6 +560,7 @@ export class PiAcpAgent implements Agent {
 
     const pending = this.pendingPrompts.get(sessionId);
     if (pending) {
+      // session.abort() above already waited for agent idle (finishRun).
       this.pendingPrompts.delete(sessionId);
       pending.resolve({ stopReason: "cancelled" });
     }
@@ -603,7 +606,13 @@ export class PiAcpAgent implements Agent {
         .catch(() => {
           // Connection may be closing; ignore
         })
-        .finally(() => {
+        .finally(async () => {
+          // Wait for finishRun() to set isStreaming = false before resolving
+          // the prompt promise. Without this, the client can send a new prompt
+          // while the agent is still marked as streaming.
+          if (session) {
+            await session.agent.waitForIdle();
+          }
           const pending = this.pendingPrompts.get(sessionId);
           if (pending) {
             this.pendingPrompts.delete(sessionId);
