@@ -363,7 +363,7 @@ describe("discoverCommands", () => {
     expect(skillCmds[0]!.description).toBe("Skill: another-skill");
   });
 
-  it("discovers prompt templates with colon prefix", () => {
+  it("discovers prompt templates by name without colon prefix", () => {
     const rl = createMockResourceLoader();
     (rl.getPrompts as any) = () => ({
       prompts: [
@@ -374,10 +374,32 @@ describe("discoverCommands", () => {
     });
     const session = createMockSession({ resourceLoader: rl });
     const commands = discoverCommands(session);
-    const promptCmds = commands.filter((c) => c.name.startsWith(":"));
+    const promptCmds = commands.filter(
+      (c) => !c.name.startsWith("skill:") && c.description.startsWith("Prompt template:"),
+    );
     expect(promptCmds.length).toBe(2);
-    expect(promptCmds[0]!.name).toBe(":explain");
-    expect(promptCmds[1]!.name).toBe(":review");
+    expect(promptCmds[0]!.name).toBe("explain");
+    expect(promptCmds[1]!.name).toBe("review");
+  });
+
+  it("forwards argumentHint as input.hint for prompt templates", () => {
+    const rl = createMockResourceLoader();
+    (rl.getPrompts as any) = () => ({
+      prompts: [
+        { name: "review", description: "Code review", argumentHint: "[model]" },
+        { name: "explain", description: "Explain code", argumentHint: "" },
+        { name: "deploy", description: "Deploy app" },
+      ],
+      diagnostics: [],
+    });
+    const session = createMockSession({ resourceLoader: rl });
+    const commands = discoverCommands(session);
+    const reviewCmd = commands.find((c) => c.name === "review");
+    const explainCmd = commands.find((c) => c.name === "explain");
+    const deployCmd = commands.find((c) => c.name === "deploy");
+    expect(reviewCmd?.input?.hint).toBe("[model]");
+    expect(explainCmd?.input).toBeUndefined();
+    expect(deployCmd?.input).toBeUndefined();
   });
 
   it("handles resource loader errors gracefully", () => {

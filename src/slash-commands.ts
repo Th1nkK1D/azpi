@@ -102,10 +102,12 @@ export function discoverCommands(
       const { prompts } = resourceLoader.getPrompts();
       if (Array.isArray(prompts)) {
         for (const template of prompts) {
-          // Prompt template commands are prefixed with ":" in Pi (e.g. /:template)
           commands.push({
-            name: `:${template.name}`,
-            description: template.description || `Prompt template: ${template.name}`,
+            name: template.name,
+            description: template.description
+              ? `Prompt template: ${template.description}`
+              : `Prompt template: ${template.name}`,
+            ...(template.argumentHint ? { input: { hint: template.argumentHint } } : {}),
           });
         }
       }
