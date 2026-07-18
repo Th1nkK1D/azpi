@@ -28,8 +28,8 @@ import type {
   SetSessionModeResponse,
 } from "@agentclientprotocol/sdk";
 import {
-  AuthStorage,
   ModelRegistry,
+  ModelRuntime,
   SessionManager,
   createAgentSession,
 } from "@earendil-works/pi-coding-agent";
@@ -70,9 +70,9 @@ import { createAcpUiBridge } from "./extension-ui-bridge";
 export interface PiAcpAgentOptions {
   /** Optional createAgentSession overrides (model, tools, etc.) */
   sessionOptions?: Omit<CreateAgentSessionOptions, "cwd" | "sessionManager">;
-  /** Optional auth storage (defaults to Pi's default path) */
-  authStorage?: AuthStorage;
-  /** Optional model registry (defaults to Pi's default path) */
+  /** Model runtime for auth and model management (required) */
+  modelRuntime: ModelRuntime;
+  /** Optional model registry (defaults to wrapping modelRuntime) */
   modelRegistry?: ModelRegistry;
   /** Optional session factory for testing */
   sessionFactory?: (cwd: string) => Promise<{ session: AgentSession }>;
@@ -94,18 +94,18 @@ export class PiAcpAgent implements Agent {
 
   readonly options: PiAcpAgentOptions;
   readonly connection: AgentSideConnection;
-  readonly authStorage: AuthStorage;
+  readonly modelRuntime: ModelRuntime;
   readonly modelRegistry: ModelRegistry;
   readonly extensionWhitelist: Set<string> | null;
   private clientCapabilities?: ClientCapabilities;
 
   readonly availableModels: Model<any>[];
 
-  constructor(connection: AgentSideConnection, options?: PiAcpAgentOptions) {
+  constructor(connection: AgentSideConnection, options: PiAcpAgentOptions) {
     this.connection = connection;
-    this.options = options ?? {};
-    this.authStorage = options?.authStorage ?? AuthStorage.create();
-    this.modelRegistry = options?.modelRegistry ?? ModelRegistry.create(this.authStorage);
+    this.options = options;
+    this.modelRuntime = options.modelRuntime;
+    this.modelRegistry = options.modelRegistry ?? new ModelRegistry(this.modelRuntime);
     this.availableModels = this.modelRegistry.getAvailable();
     this.extensionWhitelist = parseExtensionWhitelist();
   }
@@ -456,10 +456,22 @@ export class PiAcpAgent implements Agent {
         if (namingModelId) {
           try {
             const namingModel = resolveModelById(this.modelRegistry, namingModelId);
-            const auth = await this.modelRegistry.getApiKeyAndHeaders(namingModel);
+            const authResult = await this.modelRuntime.getAuth(namingModel);
             const promptText = extractTextContent(prompt);
-            if (promptText && auth.ok) {
-              name = await generateSessionName(namingModel, promptText, auth.apiKey, auth.headers);
+            if (promptText && authResult) {
+              const headers = authResult.auth.headers
+                ? Object.fromEntries(
+                    Object.entries(authResult.auth.headers).filter(
+                      (v): v is [string, string] => v[1] != null,
+                    ),
+                  )
+                : undefined;
+              name = await generateSessionName(
+                namingModel,
+                promptText,
+                authResult.auth.apiKey,
+                headers,
+              );
             }
           } catch {
             // Fall through to deriveSessionName
@@ -511,8 +523,7 @@ export class PiAcpAgent implements Agent {
         capabilities: this.clientCapabilities,
         cwd,
       }),
-      authStorage: this.authStorage,
-      modelRegistry: this.modelRegistry,
+      modelRuntime: this.modelRuntime,
       ...this.options.sessionOptions,
     });
 

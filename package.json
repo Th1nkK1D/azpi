@@ -14,7 +14,7 @@
   },
   "dependencies": {
     "@agentclientprotocol/sdk": "^0.25.0",
-    "@earendil-works/pi-coding-agent": "^0.80.7"
+    "@earendil-works/pi-coding-agent": "^0.80.10"
   },
   "devDependencies": {
     "@types/bun": "latest",

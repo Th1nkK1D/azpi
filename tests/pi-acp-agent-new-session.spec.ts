@@ -6,14 +6,16 @@ let capturedCreateAgentSessionOptions: any;
 
 mock.module("@earendil-works/pi-coding-agent", () => ({
   VERSION: "0.0.0-test",
-  AuthStorage: {
-    create: () => ({}),
+  ModelRuntime: {
+    create: async () => ({}),
   },
-  ModelRegistry: {
-    create: () => ({
-      getAvailable: () => [],
-      find: () => undefined,
-    }),
+  ModelRegistry: class {
+    getAvailable() {
+      return [];
+    }
+    find() {
+      return undefined;
+    }
   },
   SessionManager: {
     create: () => ({
@@ -91,7 +93,7 @@ describe("PiAcpAgent newSession without sessionFactory", () => {
   it("creates proxy tools with the real sessionId", async () => {
     const conn = createMockConnection();
     const agent = new PiAcpAgent(conn, {
-      authStorage: {} as any,
+      modelRuntime: {} as any,
       modelRegistry: {
         getAvailable: () => [],
         find: () => undefined,

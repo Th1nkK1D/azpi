@@ -109,8 +109,11 @@ function createMockRegistry(
   };
 }
 
-function createMockAuthStorage() {
-  return {} as any;
+function createMockModelRuntime(getAuthResult?: any) {
+  const authResult = getAuthResult === undefined ? { auth: { apiKey: "test-key" } } : getAuthResult;
+  return {
+    getAuth: mock(async () => authResult),
+  } as any;
 }
 
 function newSessionReq(): NewSessionRequest {
@@ -128,7 +131,7 @@ describe("PiAcpAgent", () => {
   describe("initialize", () => {
     it("returns protocol version and agent info", async () => {
       const conn = createMockConnection();
-      const agent = new PiAcpAgent(conn);
+      const agent = new PiAcpAgent(conn, { modelRuntime: createMockModelRuntime() });
       const result = await agent.initialize({
         clientCapabilities: {},
         clientInfo: { name: "test-client", version: "1.0.0" },
@@ -143,7 +146,7 @@ describe("PiAcpAgent", () => {
       const models = [createMockModel({ id: "text-only", input: ["text"] })];
       const conn = createMockConnection();
       const agent = new PiAcpAgent(conn, {
-        authStorage: createMockAuthStorage(),
+        modelRuntime: createMockModelRuntime(),
         modelRegistry: createMockRegistry(models) as any,
       });
       const result = await agent.initialize({
@@ -168,7 +171,7 @@ describe("PiAcpAgent", () => {
       ];
       const conn = createMockConnection();
       const agent = new PiAcpAgent(conn, {
-        authStorage: createMockAuthStorage(),
+        modelRuntime: createMockModelRuntime(),
         modelRegistry: createMockRegistry(models) as any,
       });
       const result = await agent.initialize({
@@ -187,7 +190,7 @@ describe("PiAcpAgent", () => {
       ];
       const conn = createMockConnection();
       const agent = new PiAcpAgent(conn, {
-        authStorage: createMockAuthStorage(),
+        modelRuntime: createMockModelRuntime(),
         modelRegistry: createMockRegistry(models) as any,
       });
       const result = await agent.initialize({
@@ -205,7 +208,7 @@ describe("PiAcpAgent", () => {
       const models = [createMockModel()];
       const conn = createMockConnection();
       const agent = new PiAcpAgent(conn, {
-        authStorage: createMockAuthStorage(),
+        modelRuntime: createMockModelRuntime(),
         modelRegistry: createMockRegistry(models) as any,
         sessionFactory: async () => ({ session: createMockSession() }),
       });
@@ -228,7 +231,7 @@ describe("PiAcpAgent", () => {
       const mockSession = createMockSession({ model: models[0] });
       const conn = createMockConnection();
       const agent = new PiAcpAgent(conn, {
-        authStorage: createMockAuthStorage(),
+        modelRuntime: createMockModelRuntime(),
         modelRegistry: createMockRegistry(models) as any,
         sessionFactory: async () => ({ session: mockSession }),
       });
@@ -252,7 +255,7 @@ describe("PiAcpAgent", () => {
       const mockSession = createMockSession({ model: models[0] });
       const conn = createMockConnection();
       const agent = new PiAcpAgent(conn, {
-        authStorage: createMockAuthStorage(),
+        modelRuntime: createMockModelRuntime(),
         modelRegistry: createMockRegistry(models) as any,
         sessionFactory: async () => ({ session: mockSession }),
       });
@@ -288,7 +291,7 @@ describe("PiAcpAgent", () => {
       });
       const conn = createMockConnection();
       const agent = new PiAcpAgent(conn, {
-        authStorage: createMockAuthStorage(),
+        modelRuntime: createMockModelRuntime(),
         modelRegistry: createMockRegistry(models) as any,
         sessionFactory: async () => ({ session: mockSession }),
       });
@@ -306,7 +309,7 @@ describe("PiAcpAgent", () => {
       const mockSession = createMockSession({ model: models[0] });
       const conn = createMockConnection();
       const agent = new PiAcpAgent(conn, {
-        authStorage: createMockAuthStorage(),
+        modelRuntime: createMockModelRuntime(),
         modelRegistry: createMockRegistry(models) as any,
         sessionFactory: async () => ({ session: mockSession }),
       });
@@ -326,7 +329,7 @@ describe("PiAcpAgent", () => {
       const mockSession = createMockSession({ model: models[0] });
       const conn = createMockConnection();
       const agent = new PiAcpAgent(conn, {
-        authStorage: createMockAuthStorage(),
+        modelRuntime: createMockModelRuntime(),
         modelRegistry: createMockRegistry(models) as any,
         sessionFactory: async () => ({ session: mockSession }),
       });
@@ -344,7 +347,7 @@ describe("PiAcpAgent", () => {
       });
       const conn = createMockConnection();
       const agent = new PiAcpAgent(conn, {
-        authStorage: createMockAuthStorage(),
+        modelRuntime: createMockModelRuntime(),
         modelRegistry: createMockRegistry(models) as any,
         sessionFactory: async () => ({ session: mockSession }),
       });
@@ -367,7 +370,7 @@ describe("PiAcpAgent", () => {
       const models = [createMockModel()];
       const conn = createMockConnection();
       const agent = new PiAcpAgent(conn, {
-        authStorage: createMockAuthStorage(),
+        modelRuntime: createMockModelRuntime(),
         modelRegistry: createMockRegistry(models) as any,
       });
 
@@ -386,7 +389,7 @@ describe("PiAcpAgent", () => {
       ];
       const conn = createMockConnection();
       const agent = new PiAcpAgent(conn, {
-        authStorage: createMockAuthStorage(),
+        modelRuntime: createMockModelRuntime(),
         modelRegistry: createMockRegistry(models) as any,
         sessionFactory: async () => ({ session: mockSession }),
       });
@@ -411,7 +414,7 @@ describe("PiAcpAgent", () => {
       const models = [createMockModel({ provider: "openai", id: "gpt-4" })];
       const conn = createMockConnection();
       const agent = new PiAcpAgent(conn, {
-        authStorage: createMockAuthStorage(),
+        modelRuntime: createMockModelRuntime(),
         modelRegistry: createMockRegistry(models) as any,
         sessionFactory: async () => ({ session: mockSession }),
       });
@@ -430,7 +433,7 @@ describe("PiAcpAgent", () => {
       const models = [createMockModel()];
       const conn = createMockConnection();
       const agent = new PiAcpAgent(conn, {
-        authStorage: createMockAuthStorage(),
+        modelRuntime: createMockModelRuntime(),
         modelRegistry: createMockRegistry(models) as any,
         sessionFactory: async () => ({ session: mockSession }),
       });
@@ -461,7 +464,7 @@ describe("PiAcpAgent", () => {
       const models = [createMockModel()];
       const conn = createMockConnection();
       const agent = new PiAcpAgent(conn, {
-        authStorage: createMockAuthStorage(),
+        modelRuntime: createMockModelRuntime(),
         modelRegistry: createMockRegistry(models) as any,
         sessionFactory: async () => ({ session: mockSession }),
       });
@@ -498,7 +501,7 @@ describe("PiAcpAgent", () => {
       });
       const conn = createMockConnection();
       const agent = new PiAcpAgent(conn, {
-        authStorage: createMockAuthStorage(),
+        modelRuntime: createMockModelRuntime(),
         modelRegistry: createMockRegistry(models) as any,
         sessionFactory: async () => ({ session: mockSession }),
       });
@@ -522,7 +525,7 @@ describe("PiAcpAgent", () => {
       const models = [createMockModel()];
       const conn = createMockConnection();
       const agent = new PiAcpAgent(conn, {
-        authStorage: createMockAuthStorage(),
+        modelRuntime: createMockModelRuntime(),
         modelRegistry: createMockRegistry(models) as any,
         sessionFactory: async () => ({ session: mockSession }),
       });
@@ -542,7 +545,7 @@ describe("PiAcpAgent", () => {
       const models = [createMockModel()];
       const conn = createMockConnection();
       const agent = new PiAcpAgent(conn, {
-        authStorage: createMockAuthStorage(),
+        modelRuntime: createMockModelRuntime(),
         modelRegistry: createMockRegistry(models) as any,
         sessionFactory: async () => ({ session: mockSession }),
       });
@@ -579,7 +582,7 @@ describe("PiAcpAgent", () => {
       });
       const conn = createMockConnection();
       const agent = new PiAcpAgent(conn, {
-        authStorage: createMockAuthStorage(),
+        modelRuntime: createMockModelRuntime(),
         modelRegistry: createMockRegistry(models) as any,
         sessionFactory: async () => ({ session: mockSession }),
       });
@@ -608,7 +611,7 @@ describe("PiAcpAgent", () => {
       const mockSession = createMockSession({ model: models[0] });
       const conn = createMockConnection();
       const agent = new PiAcpAgent(conn, {
-        authStorage: createMockAuthStorage(),
+        modelRuntime: createMockModelRuntime(),
         modelRegistry: createMockRegistry(models) as any,
         sessionFactory: async () => ({ session: mockSession }),
       });
@@ -631,7 +634,7 @@ describe("PiAcpAgent", () => {
       const mockSession = createMockSession({ model: models[0] });
       const conn = createMockConnection();
       const agent = new PiAcpAgent(conn, {
-        authStorage: createMockAuthStorage(),
+        modelRuntime: createMockModelRuntime(),
         modelRegistry: createMockRegistry(models) as any,
         sessionFactory: async () => ({ session: mockSession }),
       });
@@ -656,7 +659,7 @@ describe("PiAcpAgent", () => {
       const mockSession = createMockSession({ model: models[0], sessionName: undefined });
       const conn = createMockConnection();
       const agent = new PiAcpAgent(conn, {
-        authStorage: createMockAuthStorage(),
+        modelRuntime: createMockModelRuntime(),
         modelRegistry: createMockRegistry(models) as any,
         sessionFactory: async () => ({ session: mockSession }),
       });
@@ -681,7 +684,7 @@ describe("PiAcpAgent", () => {
       const mockSession = createMockSession({ model: models[0], sessionName: "Existing Name" });
       const conn = createMockConnection();
       const agent = new PiAcpAgent(conn, {
-        authStorage: createMockAuthStorage(),
+        modelRuntime: createMockModelRuntime(),
         modelRegistry: createMockRegistry(models) as any,
         sessionFactory: async () => ({ session: mockSession }),
       });
@@ -707,7 +710,7 @@ describe("PiAcpAgent", () => {
       const mockSession = createMockSession({ model: models[0], sessionName: undefined });
       const conn = createMockConnection();
       const agent = new PiAcpAgent(conn, {
-        authStorage: createMockAuthStorage(),
+        modelRuntime: createMockModelRuntime(),
         modelRegistry: createMockRegistry(models) as any,
         sessionFactory: async () => ({ session: mockSession }),
       });
@@ -748,7 +751,7 @@ describe("PiAcpAgent", () => {
       const mockSession = createMockSession({ model: models[0], sessionName: undefined });
       const conn = createMockConnection();
       const agent = new PiAcpAgent(conn, {
-        authStorage: createMockAuthStorage(),
+        modelRuntime: createMockModelRuntime(null),
         modelRegistry: createMockRegistry(models, { ok: false, error: "auth failed" }) as any,
         sessionFactory: async () => ({ session: mockSession }),
       });
@@ -781,7 +784,7 @@ describe("PiAcpAgent", () => {
       const models = [createMockModel()];
       const conn = createMockConnection();
       const agent = new PiAcpAgent(conn, {
-        authStorage: createMockAuthStorage(),
+        modelRuntime: createMockModelRuntime(),
         modelRegistry: createMockRegistry(models) as any,
         sessionFactory: async () => ({ session: mockSession }),
       });
@@ -813,7 +816,7 @@ describe("PiAcpAgent", () => {
       const mockSession = createMockSession({ model: models[0] });
       const conn = createMockConnection();
       const agent = new PiAcpAgent(conn, {
-        authStorage: createMockAuthStorage(),
+        modelRuntime: createMockModelRuntime(),
         modelRegistry: createMockRegistry(models) as any,
         sessionFactory: async () => ({ session: mockSession }),
       });
@@ -849,7 +852,7 @@ describe("PiAcpAgent", () => {
     it("does nothing when session not found", async () => {
       const conn = createMockConnection();
       const agent = new PiAcpAgent(conn, {
-        authStorage: createMockAuthStorage(),
+        modelRuntime: createMockModelRuntime(),
         modelRegistry: createMockRegistry([]) as any,
       });
 
@@ -860,7 +863,7 @@ describe("PiAcpAgent", () => {
       const mockSession = createMockSession();
       const conn = createMockConnection();
       const agent = new PiAcpAgent(conn, {
-        authStorage: createMockAuthStorage(),
+        modelRuntime: createMockModelRuntime(),
         modelRegistry: createMockRegistry([createMockModel()]) as any,
         sessionFactory: async () => ({ session: mockSession }),
       });
@@ -875,7 +878,7 @@ describe("PiAcpAgent", () => {
       const mockSession = createMockSession();
       const conn = createMockConnection();
       const agent = new PiAcpAgent(conn, {
-        authStorage: createMockAuthStorage(),
+        modelRuntime: createMockModelRuntime(),
         modelRegistry: createMockRegistry([createMockModel()]) as any,
         sessionFactory: async () => ({ session: mockSession }),
       });
@@ -902,7 +905,7 @@ describe("PiAcpAgent", () => {
       const mockSession = createMockSession();
       const conn = createMockConnection();
       const agent = new PiAcpAgent(conn, {
-        authStorage: createMockAuthStorage(),
+        modelRuntime: createMockModelRuntime(),
         modelRegistry: createMockRegistry([createMockModel()]) as any,
         sessionFactory: async () => ({ session: mockSession }),
       });
@@ -917,7 +920,7 @@ describe("PiAcpAgent", () => {
     it("does not throw when session not found", async () => {
       const conn = createMockConnection();
       const agent = new PiAcpAgent(conn, {
-        authStorage: createMockAuthStorage(),
+        modelRuntime: createMockModelRuntime(),
         modelRegistry: createMockRegistry([]) as any,
       });
 
@@ -932,7 +935,7 @@ describe("PiAcpAgent", () => {
       });
       const conn = createMockConnection();
       const agent = new PiAcpAgent(conn, {
-        authStorage: createMockAuthStorage(),
+        modelRuntime: createMockModelRuntime(),
         modelRegistry: createMockRegistry([createMockModel()]) as any,
         sessionFactory: async () => ({ session: mockSession }),
       });
@@ -952,7 +955,7 @@ describe("PiAcpAgent", () => {
       let callCount = 0;
       const conn = createMockConnection();
       const agent = new PiAcpAgent(conn, {
-        authStorage: createMockAuthStorage(),
+        modelRuntime: createMockModelRuntime(),
         modelRegistry: createMockRegistry([createMockModel()]) as any,
         sessionFactory: async () => {
           const s = callCount === 0 ? mockSession1 : mockSession2;
@@ -973,7 +976,7 @@ describe("PiAcpAgent", () => {
     it("does not throw when no sessions exist", async () => {
       const conn = createMockConnection();
       const agent = new PiAcpAgent(conn, {
-        authStorage: createMockAuthStorage(),
+        modelRuntime: createMockModelRuntime(),
         modelRegistry: createMockRegistry([]) as any,
       });
 
@@ -993,7 +996,7 @@ describe("error handling", () => {
     });
     const conn = createMockConnection();
     const agent = new PiAcpAgent(conn, {
-      authStorage: createMockAuthStorage(),
+      modelRuntime: createMockModelRuntime(),
       modelRegistry: createMockRegistry(models) as any,
       sessionFactory: async () => ({ session: mockSession }),
     });
@@ -1023,7 +1026,7 @@ describe("error handling", () => {
     });
     const conn = createMockConnection();
     const agent = new PiAcpAgent(conn, {
-      authStorage: createMockAuthStorage(),
+      modelRuntime: createMockModelRuntime(),
       modelRegistry: createMockRegistry(models) as any,
       sessionFactory: async () => ({ session: mockSession }),
     });
@@ -1052,7 +1055,7 @@ describe("error handling", () => {
     });
     const conn = createMockConnection();
     const agent = new PiAcpAgent(conn, {
-      authStorage: createMockAuthStorage(),
+      modelRuntime: createMockModelRuntime(),
       modelRegistry: createMockRegistry(models) as any,
       sessionFactory: async () => ({ session: mockSession }),
     });
@@ -1084,7 +1087,7 @@ describe("error handling", () => {
     });
     const conn = createMockConnection();
     const agent = new PiAcpAgent(conn, {
-      authStorage: createMockAuthStorage(),
+      modelRuntime: createMockModelRuntime(),
       modelRegistry: createMockRegistry(models) as any,
       sessionFactory: async () => ({ session: mockSession }),
     });
@@ -1116,7 +1119,7 @@ describe("error handling", () => {
     });
     const conn = createMockConnection();
     const agent = new PiAcpAgent(conn, {
-      authStorage: createMockAuthStorage(),
+      modelRuntime: createMockModelRuntime(),
       modelRegistry: createMockRegistry(models) as any,
       sessionFactory: async () => ({ session: mockSession }),
     });
@@ -1144,7 +1147,7 @@ describe("error handling", () => {
     const mockSession = createMockSession({ model: models[0] });
     const conn = createMockConnection();
     const agent = new PiAcpAgent(conn, {
-      authStorage: createMockAuthStorage(),
+      modelRuntime: createMockModelRuntime(),
       modelRegistry: createMockRegistry(models) as any,
       sessionFactory: async () => ({ session: mockSession }),
     });
@@ -1193,7 +1196,7 @@ describe("error handling", () => {
     });
     const conn = createMockConnection();
     const agent = new PiAcpAgent(conn, {
-      authStorage: createMockAuthStorage(),
+      modelRuntime: createMockModelRuntime(),
       modelRegistry: createMockRegistry(models) as any,
       sessionFactory: async () => ({ session: mockSession }),
     });
@@ -1251,7 +1254,7 @@ describe("notification drain on agent_end", () => {
     } as unknown as AgentSideConnection & { sessionUpdate: typeof sessionUpdate };
 
     const agent = new PiAcpAgent(conn, {
-      authStorage: createMockAuthStorage(),
+      modelRuntime: createMockModelRuntime(),
       modelRegistry: createMockRegistry(models) as any,
       sessionFactory: async () => ({ session: mockSession }),
     });
@@ -1347,7 +1350,7 @@ describe("notification drain on agent_end", () => {
     } as unknown as AgentSideConnection & { sessionUpdate: typeof sessionUpdate };
 
     const agent = new PiAcpAgent(conn, {
-      authStorage: createMockAuthStorage(),
+      modelRuntime: createMockModelRuntime(),
       modelRegistry: createMockRegistry(models) as any,
       sessionFactory: async () => ({ session: mockSession }),
     });
