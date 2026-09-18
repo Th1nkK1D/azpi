@@ -1,7 +1,7 @@
-import { PROTOCOL_VERSION, RequestError } from "@agentclientprotocol/sdk";
+import { PROTOCOL_VERSION, RequestError, agent } from "@agentclientprotocol/sdk";
 import type {
-  Agent,
-  AgentSideConnection,
+  AgentApp,
+  AgentContext,
   AuthenticateRequest,
   CancelNotification,
   ClientCapabilities,
@@ -79,10 +79,10 @@ export interface PiAcpAgentOptions {
 }
 
 /**
- * Core class implementing acp.Agent, managing Pi session lifecycle
+ * Core class handling ACP agent requests, managing Pi session lifecycle
  * and bridging Pi events to ACP notifications.
  */
-export class PiAcpAgent implements Agent {
+export class PiAcpAgent {
   private sessions = new Map<string, AgentSession>();
   private unsubscribers = new Map<string, () => void>();
   private pendingPrompts = new Map<string, { resolve: (r: PromptResponse) => void }>();
@@ -93,7 +93,7 @@ export class PiAcpAgent implements Agent {
   private notificationDrainGate: Promise<unknown> = Promise.resolve();
 
   readonly options: PiAcpAgentOptions;
-  readonly connection: AgentSideConnection;
+  readonly client: AgentContext;
   readonly modelRuntime: ModelRuntime;
   readonly modelRegistry: ModelRegistry;
   readonly extensionWhitelist: Set<string> | null;
@@ -101,8 +101,8 @@ export class PiAcpAgent implements Agent {
 
   readonly availableModels: Model<any>[];
 
-  constructor(connection: AgentSideConnection, options: PiAcpAgentOptions) {
-    this.connection = connection;
+  constructor(client: AgentContext, options: PiAcpAgentOptions) {
+    this.client = client;
     this.options = options;
     this.modelRuntime = options.modelRuntime;
     this.modelRegistry = options.modelRegistry ?? new ModelRegistry(this.modelRuntime);
@@ -158,7 +158,7 @@ export class PiAcpAgent implements Agent {
     setImmediate(() => {
       this.safeNotify(() => this.discoverAndEmitCommands(sessionId));
       this.safeNotify(() =>
-        this.connection.sessionUpdate({
+        this.client.notify("session/update", {
           sessionId,
           update: {
             content: { text: buildStartupMessage(session), type: "text" },
@@ -185,7 +185,7 @@ export class PiAcpAgent implements Agent {
     const { session } = await this.createAndRegisterSession({ cwd, sessionId, sessionPath });
 
     if (sessionPath) {
-      await replaySessionHistory(session, sessionId, this.connection);
+      await replaySessionHistory(session, sessionId, this.client);
     }
 
     this.startupMessageSent.add(sessionId);
@@ -197,9 +197,7 @@ export class PiAcpAgent implements Agent {
     };
   }
 
-  async unstable_resumeSession({
-    sessionId,
-  }: ResumeSessionRequest): Promise<ResumeSessionResponse> {
+  async resumeSession({ sessionId }: ResumeSessionRequest): Promise<ResumeSessionResponse> {
     const cwd = process.cwd();
     const sessionPath = await this.sessionResolver.resolveSessionPath(cwd, sessionId);
 
@@ -208,13 +206,13 @@ export class PiAcpAgent implements Agent {
     this.startupMessageSent.add(sessionId);
 
     if (sessionPath) {
-      await replaySessionHistory(session, sessionId, this.connection);
+      await replaySessionHistory(session, sessionId, this.client);
     }
 
     return {};
   }
 
-  async unstable_listSessions(params: ListSessionsRequest): Promise<ListSessionsResponse> {
+  async listSessions(params: ListSessionsRequest): Promise<ListSessionsResponse> {
     const cwd = params.cwd ?? process.cwd();
 
     await this.sessionResolver.warmCache(cwd);
@@ -292,7 +290,7 @@ export class PiAcpAgent implements Agent {
     if (!this.startupMessageSent.has(sessionId)) {
       this.startupMessageSent.add(sessionId);
       this.safeNotify(() =>
-        this.connection.sessionUpdate({
+        this.client.notify("session/update", {
           sessionId,
           update: {
             content: { text: buildStartupMessage(session), type: "text" },
@@ -315,7 +313,7 @@ export class PiAcpAgent implements Agent {
             this.safeNotify(() => this.discoverAndEmitCommands(sessionId));
           }
 
-          await this.connection.sessionUpdate({
+          await this.client.notify("session/update", {
             sessionId,
             update: {
               content: { text: result, type: "text" },
@@ -334,7 +332,7 @@ export class PiAcpAgent implements Agent {
       const extensionCmd = findExtensionCommand(session, matchCommand.name);
       if (extensionCmd) {
         if (!isExtensionCommandAllowed(matchCommand.name, this.extensionWhitelist)) {
-          await this.connection.sessionUpdate({
+          await this.client.notify("session/update", {
             sessionId,
             update: {
               content: {
@@ -410,10 +408,7 @@ export class PiAcpAgent implements Agent {
   }
 
   async close(): Promise<void> {
-    const sessionIds = [...this.sessions.keys()];
-    for (const id of sessionIds) {
-      this.cleanupSession(id);
-    }
+    await Promise.all([...this.sessions.keys()].map((id) => this.cleanupSession(id)));
   }
 
   private buildConfigOptions(session: AgentSession): SessionConfigOption[] {
@@ -435,7 +430,7 @@ export class PiAcpAgent implements Agent {
       },
     };
 
-    await this.connection.sessionUpdate(notification);
+    await this.client.notify("session/update", notification);
   }
 
   /**
@@ -518,7 +513,7 @@ export class PiAcpAgent implements Agent {
       cwd,
       sessionManager,
       customTools: createAcpProxyTools({
-        connection: this.connection,
+        client: this.client,
         sessionId: resolvedSessionId,
         capabilities: this.clientCapabilities,
         cwd,
@@ -528,7 +523,7 @@ export class PiAcpAgent implements Agent {
     });
 
     await session.bindExtensions({
-      uiContext: createAcpUiBridge(this.connection, resolvedSessionId),
+      uiContext: createAcpUiBridge(this.client, resolvedSessionId),
     });
 
     this.registerSession(resolvedSessionId, session);
@@ -592,7 +587,7 @@ export class PiAcpAgent implements Agent {
     const configOptions = session ? this.buildConfigOptions(session) : undefined;
     const notification = mapSessionEvent(event, sessionId, configOptions);
     if (notification) {
-      this.safeNotify(() => this.connection.sessionUpdate(notification));
+      this.safeNotify(() => this.client.notify("session/update", notification));
     }
 
     if (event.type === "agent_end") {
@@ -606,7 +601,7 @@ export class PiAcpAgent implements Agent {
       // while the final text is still streaming.
       this.notificationDrainGate
         .then(() =>
-          this.connection.sessionUpdate({
+          this.client.notify("session/update", {
             sessionId,
             update: {
               sessionUpdate: SessionUpdateType.SessionInfoUpdate,
@@ -645,13 +640,13 @@ export class PiAcpAgent implements Agent {
       },
     };
 
-    await this.connection.sessionUpdate(notification);
+    await this.client.notify("session/update", notification);
     this.commandsAdvertised.add(sessionId);
   }
 
   private notifyError(sessionId: string, message: string): void {
     this.safeNotify(() =>
-      this.connection.sessionUpdate({
+      this.client.notify("session/update", {
         sessionId,
         update: {
           content: { text: `❌ Error: ${message}`, type: "text" },
@@ -668,4 +663,29 @@ export class PiAcpAgent implements Agent {
     // Chain into drain gate so agent_end can await all pending writes
     this.notificationDrainGate = Promise.allSettled([this.notificationDrainGate, promise]);
   }
+}
+
+/**
+ * Builds the ACP agent app, routing each ACP method to a PiAcpAgent
+ * created per connection and disposed when the connection closes.
+ */
+export function createAgentApp(options: PiAcpAgentOptions): AgentApp {
+  // onConnect runs synchronously inside connect(), before any message is handled.
+  let pi: PiAcpAgent;
+  return agent({ name: "AZPi" })
+    .onConnect((connection) => {
+      pi = new PiAcpAgent(connection.client, options);
+      void connection.closed.then(() => pi.close());
+    })
+    .onRequest("initialize", (ctx) => pi.initialize(ctx.params))
+    .onRequest("authenticate", (ctx) => pi.authenticate(ctx.params))
+    .onRequest("session/new", (ctx) => pi.newSession(ctx.params))
+    .onRequest("session/load", (ctx) => pi.loadSession(ctx.params))
+    .onRequest("session/resume", (ctx) => pi.resumeSession(ctx.params))
+    .onRequest("session/list", (ctx) => pi.listSessions(ctx.params))
+    .onRequest("session/close", (ctx) => pi.closeSession(ctx.params))
+    .onRequest("session/set_mode", (ctx) => pi.setSessionMode(ctx.params))
+    .onRequest("session/set_config_option", (ctx) => pi.setSessionConfigOption(ctx.params))
+    .onRequest("session/prompt", (ctx) => pi.prompt(ctx.params))
+    .onNotification("session/cancel", (ctx) => pi.cancel(ctx.params));
 }

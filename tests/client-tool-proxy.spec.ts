@@ -1,40 +1,13 @@
 import { describe, expect, it, mock } from "bun:test";
-import type { AgentSideConnection, TerminalHandle } from "@agentclientprotocol/sdk";
 import { createAcpProxyTools } from "../src/client-tool-proxy";
+import { mockClient } from "./mock-client";
 
-function mockConnection(overrides?: Partial<AgentSideConnection>): AgentSideConnection {
-  return {
-    readTextFile: mock().mockResolvedValue({ content: "" }),
-    writeTextFile: mock().mockResolvedValue({}),
-    createTerminal: mock(),
-    sessionUpdate: mock().mockResolvedValue(undefined),
-    requestPermission: mock(),
-    extMethod: mock(),
-    extNotification: mock(),
-    get signal(): AbortSignal {
-      return new AbortController().signal;
-    },
-    get closed(): Promise<void> {
-      return Promise.resolve();
-    },
-    ...overrides,
-  } as unknown as AgentSideConnection;
-}
-
-function mockTerminalHandle(overrides?: Partial<TerminalHandle>): TerminalHandle {
-  return {
-    id: "term-1",
-    currentOutput: mock().mockResolvedValue({
-      output: "",
-      truncated: false,
-      exitStatus: undefined,
-    }),
-    waitForExit: mock().mockResolvedValue({ exitCode: 0, signal: null }),
-    kill: mock().mockResolvedValue({}),
-    release: mock().mockResolvedValue({}),
-    [Symbol.asyncDispose]: mock().mockResolvedValue(undefined),
-    ...overrides,
-  } as unknown as TerminalHandle;
+/** Mock client whose terminal/output responses come from `output`. */
+function mockTerminalClient(output: (params: any) => any) {
+  return mockClient({
+    "terminal/create": async () => ({ terminalId: "term-1" }),
+    "terminal/output": output,
+  });
 }
 
 describe("createAcpProxyTools", () => {
@@ -43,7 +16,7 @@ describe("createAcpProxyTools", () => {
 
   it("returns empty array when no capabilities are advertised", () => {
     const tools = createAcpProxyTools({
-      connection: mockConnection(),
+      client: mockClient(),
       sessionId,
       capabilities: {},
       cwd: defaultCwd,
@@ -53,7 +26,7 @@ describe("createAcpProxyTools", () => {
 
   it("creates read proxy when client advertises fs.readTextFile", () => {
     const tools = createAcpProxyTools({
-      connection: mockConnection(),
+      client: mockClient(),
       sessionId,
       capabilities: { fs: { readTextFile: true } },
       cwd: defaultCwd,
@@ -67,7 +40,7 @@ describe("createAcpProxyTools", () => {
 
   it("creates write proxy when client advertises fs.writeTextFile", () => {
     const tools = createAcpProxyTools({
-      connection: mockConnection(),
+      client: mockClient(),
       sessionId,
       capabilities: { fs: { writeTextFile: true } },
       cwd: defaultCwd,
@@ -81,7 +54,7 @@ describe("createAcpProxyTools", () => {
 
   it("creates edit proxy only when both read + write are advertised", () => {
     const tools = createAcpProxyTools({
-      connection: mockConnection(),
+      client: mockClient(),
       sessionId,
       capabilities: { fs: { readTextFile: true, writeTextFile: true } },
       cwd: defaultCwd,
@@ -95,7 +68,7 @@ describe("createAcpProxyTools", () => {
 
   it("creates bash proxy when client advertises terminal", () => {
     const tools = createAcpProxyTools({
-      connection: mockConnection(),
+      client: mockClient(),
       sessionId,
       capabilities: { terminal: true },
       cwd: defaultCwd,
@@ -109,7 +82,7 @@ describe("createAcpProxyTools", () => {
 
   it("creates all proxies when full capabilities advertised", () => {
     const tools = createAcpProxyTools({
-      connection: mockConnection(),
+      client: mockClient(),
       sessionId,
       capabilities: {
         fs: { readTextFile: true, writeTextFile: true },
@@ -131,13 +104,13 @@ describe("read proxy", () => {
   const sessionId = "test-session-id";
 
   it("reads file content and applies offset/limit", async () => {
-    const conn = mockConnection({
-      readTextFile: mock().mockResolvedValue({
+    const conn = mockClient({
+      "fs/read_text_file": mock().mockResolvedValue({
         content: "line1\nline2\nline3\nline4\nline5",
       }),
     });
     const tools = createAcpProxyTools({
-      connection: conn,
+      client: conn,
       sessionId,
       capabilities: { fs: { readTextFile: true } },
       cwd,
@@ -160,11 +133,11 @@ describe("read proxy", () => {
   });
 
   it("resolves relative paths against cwd", async () => {
-    const conn = mockConnection({
-      readTextFile: mock().mockResolvedValue({ content: "hello" }),
+    const conn = mockClient({
+      "fs/read_text_file": mock().mockResolvedValue({ content: "hello" }),
     });
     const tools = createAcpProxyTools({
-      connection: conn,
+      client: conn,
       sessionId,
       capabilities: { fs: { readTextFile: true } },
       cwd,
@@ -173,17 +146,17 @@ describe("read proxy", () => {
 
     await readTool.execute("tc-1", { path: "sub/file.txt" }, undefined, undefined, {} as any);
 
-    expect(conn.readTextFile).toHaveBeenCalledWith(
+    expect(conn.method("fs/read_text_file")).toHaveBeenCalledWith(
       expect.objectContaining({ path: "/home/user/project/sub/file.txt" }),
     );
   });
 
   it("passes absolute paths as-is", async () => {
-    const conn = mockConnection({
-      readTextFile: mock().mockResolvedValue({ content: "hello" }),
+    const conn = mockClient({
+      "fs/read_text_file": mock().mockResolvedValue({ content: "hello" }),
     });
     const tools = createAcpProxyTools({
-      connection: conn,
+      client: conn,
       sessionId,
       capabilities: { fs: { readTextFile: true } },
       cwd,
@@ -192,17 +165,17 @@ describe("read proxy", () => {
 
     await readTool.execute("tc-1", { path: "/tmp/file.txt" }, undefined, undefined, {} as any);
 
-    expect(conn.readTextFile).toHaveBeenCalledWith(
+    expect(conn.method("fs/read_text_file")).toHaveBeenCalledWith(
       expect.objectContaining({ path: "/tmp/file.txt" }),
     );
   });
 
   it("handles files with fewer lines than offset", async () => {
-    const conn = mockConnection({
-      readTextFile: mock().mockResolvedValue({ content: "line1\nline2" }),
+    const conn = mockClient({
+      "fs/read_text_file": mock().mockResolvedValue({ content: "line1\nline2" }),
     });
     const tools = createAcpProxyTools({
-      connection: conn,
+      client: conn,
       sessionId,
       capabilities: { fs: { readTextFile: true } },
       cwd,
@@ -226,11 +199,11 @@ describe("write proxy", () => {
   const sessionId = "test-session-id";
 
   it("writes content to file and returns success message", async () => {
-    const conn = mockConnection({
-      writeTextFile: mock().mockResolvedValue({}),
+    const conn = mockClient({
+      "fs/write_text_file": mock().mockResolvedValue({}),
     });
     const tools = createAcpProxyTools({
-      connection: conn,
+      client: conn,
       sessionId,
       capabilities: { fs: { writeTextFile: true } },
       cwd,
@@ -245,7 +218,7 @@ describe("write proxy", () => {
       {} as any,
     );
 
-    expect(conn.writeTextFile).toHaveBeenCalledWith({
+    expect(conn.method("fs/write_text_file")).toHaveBeenCalledWith({
       sessionId,
       path: "/home/user/project/out.txt",
       content: "hello world",
@@ -263,12 +236,12 @@ describe("edit proxy", () => {
   const sessionId = "test-session-id";
 
   it("reads, edits, and writes the file", async () => {
-    const conn = mockConnection({
-      readTextFile: mock().mockResolvedValue({ content: "hello old world" }),
-      writeTextFile: mock().mockResolvedValue({}),
+    const conn = mockClient({
+      "fs/read_text_file": mock().mockResolvedValue({ content: "hello old world" }),
+      "fs/write_text_file": mock().mockResolvedValue({}),
     });
     const tools = createAcpProxyTools({
-      connection: conn,
+      client: conn,
       sessionId,
       capabilities: { fs: { readTextFile: true, writeTextFile: true } },
       cwd,
@@ -283,12 +256,12 @@ describe("edit proxy", () => {
       {} as any,
     );
 
-    expect(conn.readTextFile).toHaveBeenCalledWith({
+    expect(conn.method("fs/read_text_file")).toHaveBeenCalledWith({
       sessionId,
       path: "/home/user/project/test.txt",
     });
 
-    expect(conn.writeTextFile).toHaveBeenCalledWith({
+    expect(conn.method("fs/write_text_file")).toHaveBeenCalledWith({
       sessionId,
       path: "/home/user/project/test.txt",
       content: "hello new world",
@@ -298,12 +271,12 @@ describe("edit proxy", () => {
   });
 
   it("throws if oldText not found", async () => {
-    const conn = mockConnection({
-      readTextFile: mock().mockResolvedValue({ content: "hello world" }),
-      writeTextFile: mock().mockResolvedValue({}),
+    const conn = mockClient({
+      "fs/read_text_file": mock().mockResolvedValue({ content: "hello world" }),
+      "fs/write_text_file": mock().mockResolvedValue({}),
     });
     const tools = createAcpProxyTools({
-      connection: conn,
+      client: conn,
       sessionId,
       capabilities: { fs: { readTextFile: true, writeTextFile: true } },
       cwd,
@@ -322,12 +295,12 @@ describe("edit proxy", () => {
   });
 
   it("applies multiple edits sequentially", async () => {
-    const conn = mockConnection({
-      readTextFile: mock().mockResolvedValue({ content: "a b c" }),
-      writeTextFile: mock().mockResolvedValue({}),
+    const conn = mockClient({
+      "fs/read_text_file": mock().mockResolvedValue({ content: "a b c" }),
+      "fs/write_text_file": mock().mockResolvedValue({}),
     });
     const tools = createAcpProxyTools({
-      connection: conn,
+      client: conn,
       sessionId,
       capabilities: { fs: { readTextFile: true, writeTextFile: true } },
       cwd,
@@ -349,7 +322,7 @@ describe("edit proxy", () => {
       {} as any,
     );
 
-    expect(conn.writeTextFile).toHaveBeenCalledWith({
+    expect(conn.method("fs/write_text_file")).toHaveBeenCalledWith({
       sessionId,
       path: "/home/user/project/test.txt",
       content: "1 2 3",
@@ -362,20 +335,17 @@ describe("bash proxy", () => {
   const sessionId = "test-session-id";
 
   it("creates a terminal, polls until exit, returns output", async () => {
-    const terminal = mockTerminalHandle({
-      currentOutput: mock()
+    const conn = mockTerminalClient(
+      mock()
         .mockResolvedValueOnce({ output: "progress...", truncated: false, exitStatus: undefined })
         .mockResolvedValueOnce({
           output: "final output",
           truncated: false,
           exitStatus: { exitCode: 0, signal: null },
         }),
-    });
-    const conn = mockConnection({
-      createTerminal: mock().mockResolvedValue(terminal),
-    });
+    );
     const tools = createAcpProxyTools({
-      connection: conn,
+      client: conn,
       sessionId,
       capabilities: { terminal: true },
       cwd,
@@ -390,21 +360,28 @@ describe("bash proxy", () => {
       {} as any,
     );
 
-    expect(conn.createTerminal).toHaveBeenCalledWith({
+    expect(conn.method("terminal/create")).toHaveBeenCalledWith({
       sessionId,
       command: "echo hello",
       cwd,
     });
+    expect(conn.method("terminal/output")).toHaveBeenCalledWith({
+      sessionId,
+      terminalId: "term-1",
+    });
 
     expect(result.content[0]).toMatchObject({ type: "text" });
     expect((result.content[0] as any).text).toBe("final output");
-    expect(terminal.release).toHaveBeenCalled();
+    expect(conn.method("terminal/release")).toHaveBeenCalledWith({
+      sessionId,
+      terminalId: "term-1",
+    });
   });
 
   it("streams partial output via onUpdate callback", async () => {
     const onUpdate = mock();
-    const terminal = mockTerminalHandle({
-      currentOutput: mock()
+    const conn = mockTerminalClient(
+      mock()
         .mockResolvedValueOnce({ output: "hello", truncated: false, exitStatus: undefined })
         .mockResolvedValueOnce({ output: "hello world", truncated: false, exitStatus: undefined })
         .mockResolvedValueOnce({
@@ -412,12 +389,9 @@ describe("bash proxy", () => {
           truncated: false,
           exitStatus: { exitCode: 0, signal: null },
         }),
-    });
-    const conn = mockConnection({
-      createTerminal: mock().mockResolvedValue(terminal),
-    });
+    );
     const tools = createAcpProxyTools({
-      connection: conn,
+      client: conn,
       sessionId,
       capabilities: { terminal: true },
       cwd,
@@ -432,23 +406,18 @@ describe("bash proxy", () => {
   });
 
   it("kills and releases terminal on cancellation", async () => {
-    const terminal = mockTerminalHandle({
-      currentOutput: mock().mockResolvedValue({
-        output: "partial",
-        truncated: false,
-        exitStatus: undefined,
-      }),
-    });
-    const conn = mockConnection({
-      createTerminal: mock().mockResolvedValue(terminal),
-    });
+    const conn = mockTerminalClient(async () => ({
+      output: "partial",
+      truncated: false,
+      exitStatus: undefined,
+    }));
 
     // Create an abort controller that fires
     const controller = new AbortController();
     const signal = controller.signal;
 
     const tools = createAcpProxyTools({
-      connection: conn,
+      client: conn,
       sessionId,
       capabilities: { terminal: true },
       cwd,
@@ -465,25 +434,20 @@ describe("bash proxy", () => {
     controller.abort();
 
     const result = await promise;
-    expect(terminal.kill).toHaveBeenCalled();
-    expect(terminal.release).toHaveBeenCalled();
+    expect(conn.method("terminal/kill")).toHaveBeenCalled();
+    expect(conn.method("terminal/release")).toHaveBeenCalled();
     expect((result.content[0] as any).text).toContain("Command cancelled");
   });
 
   it("times out after specified duration", async () => {
-    const terminal = mockTerminalHandle({
-      currentOutput: mock().mockResolvedValue({
-        output: "running...",
-        truncated: false,
-        exitStatus: undefined,
-      }),
-    });
-    const conn = mockConnection({
-      createTerminal: mock().mockResolvedValue(terminal),
-    });
+    const conn = mockTerminalClient(async () => ({
+      output: "running...",
+      truncated: false,
+      exitStatus: undefined,
+    }));
 
     const tools = createAcpProxyTools({
-      connection: conn,
+      client: conn,
       sessionId,
       capabilities: { terminal: true },
       cwd,
@@ -499,22 +463,18 @@ describe("bash proxy", () => {
       {} as any,
     );
 
-    expect(terminal.kill).toHaveBeenCalled();
-    expect(terminal.release).toHaveBeenCalled();
+    expect(conn.method("terminal/kill")).toHaveBeenCalled();
+    expect(conn.method("terminal/release")).toHaveBeenCalled();
     expect((result.content[0] as any).text).toContain("timed out");
   });
 
   it("releases terminal on error", async () => {
-    const terminal = mockTerminalHandle({
-      currentOutput: mock().mockRejectedValue(new Error("connection lost")),
-      release: mock().mockResolvedValue({}),
-    });
-    const conn = mockConnection({
-      createTerminal: mock().mockResolvedValue(terminal),
+    const conn = mockTerminalClient(async () => {
+      throw new Error("connection lost");
     });
 
     const tools = createAcpProxyTools({
-      connection: conn,
+      client: conn,
       sessionId,
       capabilities: { terminal: true },
       cwd,
@@ -525,6 +485,6 @@ describe("bash proxy", () => {
       bashTool.execute("tc-1", { command: "echo hello" }, undefined, undefined, {} as any),
     ).rejects.toThrow("connection lost");
 
-    expect(terminal.release).toHaveBeenCalled();
+    expect(conn.method("terminal/release")).toHaveBeenCalled();
   });
 });

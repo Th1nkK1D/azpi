@@ -1,6 +1,6 @@
 import { describe, expect, it, mock } from "bun:test";
 import { PROTOCOL_VERSION } from "@agentclientprotocol/sdk";
-import type { AgentSideConnection } from "@agentclientprotocol/sdk";
+import { mockClient } from "./mock-client";
 
 let capturedCreateAgentSessionOptions: any;
 
@@ -61,37 +61,16 @@ mock.module("@earendil-works/pi-coding-agent", () => ({
 
 const { PiAcpAgent } = await import("../src/pi-acp-agent");
 
-function createMockConnection(): AgentSideConnection & {
-  sessionUpdate: ReturnType<typeof mock>;
-  createTerminal: ReturnType<typeof mock>;
-} {
-  const sessionUpdate = mock(async () => {});
-  const createTerminal = mock(async () => ({
-    currentOutput: mock(async () => ({
-      output: "",
-      exitStatus: { exitCode: 0 },
-      truncated: false,
-    })),
-    kill: mock(async () => {}),
-    release: mock(async () => {}),
-  }));
-  return {
-    closed: Promise.resolve(),
-    extMethod: mock(async () => ({})),
-    extNotification: mock(async () => {}),
-    requestPermission: mock(async () => ({ action: "allow" as const })),
-    sessionUpdate,
-    createTerminal,
-    signal: new AbortController().signal,
-  } as unknown as AgentSideConnection & {
-    sessionUpdate: ReturnType<typeof mock>;
-    createTerminal: ReturnType<typeof mock>;
-  };
-}
-
 describe("PiAcpAgent newSession without sessionFactory", () => {
   it("creates proxy tools with the real sessionId", async () => {
-    const conn = createMockConnection();
+    const conn = mockClient({
+      "terminal/create": async () => ({ terminalId: "term-1" }),
+      "terminal/output": async () => ({
+        output: "",
+        exitStatus: { exitCode: 0 },
+        truncated: false,
+      }),
+    });
     const agent = new PiAcpAgent(conn, {
       modelRuntime: {} as any,
       modelRegistry: {
@@ -123,7 +102,7 @@ describe("PiAcpAgent newSession without sessionFactory", () => {
 
     await bashTool.execute("tc-1", { command: "echo hello" }, undefined, undefined, {} as any);
 
-    expect(conn.createTerminal).toHaveBeenCalledWith(
+    expect(conn.method("terminal/create")).toHaveBeenCalledWith(
       expect.objectContaining({
         sessionId: "real-session-id",
         command: "echo hello",

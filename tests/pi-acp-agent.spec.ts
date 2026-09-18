@@ -1,29 +1,12 @@
 /* eslint-disable no-underscore-dangle */
 import { describe, expect, it, mock } from "bun:test";
-import { PROTOCOL_VERSION, RequestError } from "@agentclientprotocol/sdk";
-import type {
-  AgentSideConnection,
-  NewSessionRequest,
-  PromptRequest,
-} from "@agentclientprotocol/sdk";
-import { PiAcpAgent } from "../src/pi-acp-agent";
+import { PROTOCOL_VERSION, RequestError, client } from "@agentclientprotocol/sdk";
+import type { NewSessionRequest, PromptRequest } from "@agentclientprotocol/sdk";
+import { PiAcpAgent, createAgentApp } from "../src/pi-acp-agent";
 import type { AgentSession } from "@earendil-works/pi-coding-agent";
 import type { Model } from "@earendil-works/pi-ai";
 import * as realPiAiCompat from "@earendil-works/pi-ai/compat";
-
-function createMockConnection(): AgentSideConnection & {
-  sessionUpdate: ReturnType<typeof mock>;
-} {
-  const sessionUpdate = mock(async () => {});
-  return {
-    closed: Promise.resolve(),
-    extMethod: mock(async () => ({})),
-    extNotification: mock(async () => {}),
-    requestPermission: mock(async () => ({ action: "allow" as const })),
-    sessionUpdate,
-    signal: new AbortController().signal,
-  } as unknown as AgentSideConnection & { sessionUpdate: ReturnType<typeof mock> };
-}
+import { mockClient as createMockConnection } from "./mock-client";
 
 function createMockModel(overrides?: Partial<Model<any>>): Model<any> {
   return {
@@ -334,7 +317,7 @@ describe("PiAcpAgent", () => {
         sessionFactory: async () => ({ session: mockSession }),
       });
 
-      const result = await agent.unstable_resumeSession({ sessionId: "nonexistent", cwd: "" });
+      const result = await agent.resumeSession({ sessionId: "nonexistent", cwd: "" });
       expect(result).toEqual({});
     });
 
@@ -352,7 +335,7 @@ describe("PiAcpAgent", () => {
         sessionFactory: async () => ({ session: mockSession }),
       });
 
-      await agent.unstable_resumeSession({ sessionId, cwd: "" });
+      await agent.resumeSession({ sessionId, cwd: "" });
 
       // startup message should not be sent — neither during resume nor as fallback in prompt()
       const calls = conn.sessionUpdate.mock.calls as any[];
@@ -365,7 +348,7 @@ describe("PiAcpAgent", () => {
     });
   });
 
-  describe("unstable_listSessions", () => {
+  describe("listSessions", () => {
     it("returns empty sessions list when no sessions exist", async () => {
       const models = [createMockModel()];
       const conn = createMockConnection();
@@ -374,7 +357,7 @@ describe("PiAcpAgent", () => {
         modelRegistry: createMockRegistry(models) as any,
       });
 
-      const result = await agent.unstable_listSessions({});
+      const result = await agent.listSessions({});
       expect(result.sessions).toBeDefined();
       expect(Array.isArray(result.sessions)).toBe(true);
     });
@@ -1244,14 +1227,7 @@ describe("notification drain on agent_end", () => {
       });
     });
 
-    const conn = {
-      closed: Promise.resolve(),
-      extMethod: mock(async () => ({})),
-      extNotification: mock(async () => {}),
-      requestPermission: mock(async () => ({ action: "allow" as const })),
-      sessionUpdate,
-      signal: new AbortController().signal,
-    } as unknown as AgentSideConnection & { sessionUpdate: typeof sessionUpdate };
+    const conn = createMockConnection({ "session/update": sessionUpdate });
 
     const agent = new PiAcpAgent(conn, {
       modelRuntime: createMockModelRuntime(),
@@ -1340,14 +1316,7 @@ describe("notification drain on agent_end", () => {
       await new Promise(() => {}); // never resolves
     });
 
-    const conn = {
-      closed: Promise.resolve(),
-      extMethod: mock(async () => ({})),
-      extNotification: mock(async () => {}),
-      requestPermission: mock(async () => ({ action: "allow" as const })),
-      sessionUpdate,
-      signal: new AbortController().signal,
-    } as unknown as AgentSideConnection & { sessionUpdate: typeof sessionUpdate };
+    const conn = createMockConnection({ "session/update": sessionUpdate });
 
     const agent = new PiAcpAgent(conn, {
       modelRuntime: createMockModelRuntime(),
@@ -1376,5 +1345,52 @@ describe("notification drain on agent_end", () => {
 
     const result = await promptPromise;
     expect(result.stopReason).toBe("cancelled");
+  });
+});
+
+describe("createAgentApp", () => {
+  it("routes ACP methods over a connection and disposes sessions on close", async () => {
+    const mockSession = createMockSession({ sessionId: "s1" });
+    const app = createAgentApp({
+      modelRuntime: createMockModelRuntime(),
+      modelRegistry: createMockRegistry([createMockModel()]) as any,
+      sessionFactory: async () => ({ session: mockSession }),
+    });
+
+    const result = await client().connectWith(app, async (ctx) => {
+      const init = await ctx.request("initialize", {
+        protocolVersion: PROTOCOL_VERSION,
+        clientCapabilities: {},
+      });
+      const session = await ctx.request("session/new", newSessionReq());
+      const list = await ctx.request("session/list", { cwd: "/nonexistent-azpi-test" });
+      await ctx.request("session/set_config_option", {
+        sessionId: "s1",
+        configId: "thinking-level",
+        value: "high",
+      });
+      await ctx.request("session/close", { sessionId: "s1" });
+      return { init, session, list };
+    });
+
+    expect(result.init.agentInfo?.name).toBe("AZPi");
+    expect(result.session.sessionId).toBe("s1");
+    expect(result.list.sessions).toBeArray();
+    expect(mockSession.setThinkingLevel).toHaveBeenCalledWith("high");
+    expect(mockSession.dispose).toHaveBeenCalled();
+  });
+
+  it("disposes open sessions when the connection closes", async () => {
+    const mockSession = createMockSession({ sessionId: "s1" });
+    const app = createAgentApp({
+      modelRuntime: createMockModelRuntime(),
+      modelRegistry: createMockRegistry([createMockModel()]) as any,
+      sessionFactory: async () => ({ session: mockSession }),
+    });
+
+    await client().connectWith(app, (ctx) => ctx.request("session/new", newSessionReq()));
+    await Bun.sleep(10);
+
+    expect(mockSession.dispose).toHaveBeenCalled();
   });
 });

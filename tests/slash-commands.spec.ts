@@ -425,6 +425,12 @@ describe("discoverCommands", () => {
       getAppendSystemPrompt: () => {
         throw new Error("boom");
       },
+      getSystemPromptSource: () => {
+        throw new Error("boom");
+      },
+      getAppendSystemPromptSources: () => {
+        throw new Error("boom");
+      },
       extendResources: mock(async () => {
         throw new Error("boom");
       }),

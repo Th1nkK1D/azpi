@@ -1,6 +1,6 @@
 import { SessionManager } from "@earendil-works/pi-coding-agent";
 import type { AgentSession } from "@earendil-works/pi-coding-agent";
-import type { AgentSideConnection } from "@agentclientprotocol/sdk";
+import type { AgentContext } from "@agentclientprotocol/sdk";
 import { extractMessageText } from "./event-bridge";
 import { SessionUpdateType } from "./session-update-types";
 
@@ -62,7 +62,7 @@ export class SessionResolver {
 export async function replaySessionHistory(
   session: AgentSession,
   sessionId: string,
-  connection: AgentSideConnection,
+  client: AgentContext,
 ): Promise<void> {
   // Walk active branch from leaf to root — getEntries() returns ALL
   // entries including abandoned branches, which would replay stale
@@ -80,7 +80,7 @@ export async function replaySessionHistory(
       const text = extractMessageText(message);
       if (!text) continue;
       updates.push(
-        connection.sessionUpdate({
+        client.notify("session/update", {
           sessionId,
           update: {
             sessionUpdate: SessionUpdateType.UserMessageChunk,
@@ -89,9 +89,9 @@ export async function replaySessionHistory(
         }),
       );
     } else if (role === "assistant") {
-      replayAssistantMessage(message as any, sessionId, connection, updates);
+      replayAssistantMessage(message as any, sessionId, client, updates);
     } else if (role === "toolResult") {
-      replayToolResult(message as any, sessionId, connection, updates);
+      replayToolResult(message as any, sessionId, client, updates);
     }
   }
 
@@ -102,14 +102,14 @@ export async function replaySessionHistory(
 function replayAssistantMessage(
   message: any,
   sessionId: string,
-  connection: AgentSideConnection,
+  client: AgentContext,
   updates: Promise<void>[],
 ): void {
   const content = message.content;
   if (typeof content === "string") {
     if (content.length > 0) {
       updates.push(
-        connection.sessionUpdate({
+        client.notify("session/update", {
           sessionId,
           update: {
             sessionUpdate: SessionUpdateType.AgentMessageChunk,
@@ -130,7 +130,7 @@ function replayAssistantMessage(
       const thinking = block.thinking;
       if (typeof thinking === "string" && thinking.length > 0) {
         updates.push(
-          connection.sessionUpdate({
+          client.notify("session/update", {
             sessionId,
             update: {
               sessionUpdate: SessionUpdateType.AgentThoughtChunk,
@@ -145,7 +145,7 @@ function replayAssistantMessage(
       const argsStr = safeStringify(block.arguments);
       if (typeof toolCallId === "string" && typeof toolName === "string") {
         updates.push(
-          connection.sessionUpdate({
+          client.notify("session/update", {
             sessionId,
             update: {
               sessionUpdate: SessionUpdateType.ToolCall,
@@ -166,7 +166,7 @@ function replayAssistantMessage(
       const text = block.text;
       if (typeof text === "string" && text.length > 0) {
         updates.push(
-          connection.sessionUpdate({
+          client.notify("session/update", {
             sessionId,
             update: {
               sessionUpdate: SessionUpdateType.AgentMessageChunk,
@@ -183,7 +183,7 @@ function replayAssistantMessage(
 function replayToolResult(
   message: any,
   sessionId: string,
-  connection: AgentSideConnection,
+  client: AgentContext,
   updates: Promise<void>[],
 ): void {
   const toolCallId = message.toolCallId;
@@ -193,7 +193,7 @@ function replayToolResult(
   const resultText = extractTextFromToolResult(message.content);
 
   updates.push(
-    connection.sessionUpdate({
+    client.notify("session/update", {
       sessionId,
       update: {
         sessionUpdate: SessionUpdateType.ToolCallUpdate,

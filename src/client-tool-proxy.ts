@@ -1,4 +1,8 @@
-import type { AgentSideConnection, ClientCapabilities } from "@agentclientprotocol/sdk";
+import type {
+  AgentContext,
+  ClientCapabilities,
+  TerminalOutputResponse,
+} from "@agentclientprotocol/sdk";
 import type { ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { defineTool } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
@@ -37,8 +41,8 @@ const bashParams = Type.Object({
 const ONE_BASED_LINE_OFFSET = 1;
 
 export interface AcpProxyToolOptions {
-  /** The ACP agent-side connection */
-  connection: AgentSideConnection;
+  /** The ACP client context for outbound requests */
+  client: AgentContext;
   /** Current session ID */
   sessionId: string;
   /** Client capabilities from initialize */
@@ -53,7 +57,7 @@ export interface AcpProxyToolOptions {
  * are advertised (all native tools remain active).
  */
 export function createAcpProxyTools({
-  connection,
+  client,
   sessionId,
   capabilities,
   cwd,
@@ -65,20 +69,20 @@ export function createAcpProxyTools({
   }
 
   if (capabilities.fs?.readTextFile) {
-    tools.push(createReadProxy(connection, sessionId, cwd));
+    tools.push(createReadProxy(client, sessionId, cwd));
   }
 
   if (capabilities.fs?.writeTextFile) {
-    tools.push(createWriteProxy(connection, sessionId, cwd));
+    tools.push(createWriteProxy(client, sessionId, cwd));
   }
 
   // The "edit" tool requires both read + write capabilities
   if (capabilities.fs?.readTextFile && capabilities.fs?.writeTextFile) {
-    tools.push(createEditProxy(connection, sessionId, cwd));
+    tools.push(createEditProxy(client, sessionId, cwd));
   }
 
   if (capabilities.terminal) {
-    tools.push(createBashProxy(connection, sessionId, cwd));
+    tools.push(createBashProxy(client, sessionId, cwd));
   }
 
   return tools;
@@ -106,11 +110,7 @@ function applyOffsetLimit(content: string, offset?: number, limit?: number): str
   return resultLines.join("\n");
 }
 
-function createReadProxy(
-  connection: AgentSideConnection,
-  sessionId: string,
-  cwd: string,
-): ToolDefinition {
+function createReadProxy(client: AgentContext, sessionId: string, cwd: string): ToolDefinition {
   return defineTool({
     name: "read",
     label: "Read File",
@@ -119,7 +119,7 @@ function createReadProxy(
     execute: async (_toolCallId, params) => {
       const absolutePath = resolvePath(cwd, params.path);
 
-      const response = await connection.readTextFile({
+      const response = await client.request("fs/read_text_file", {
         sessionId,
         path: absolutePath,
       });
@@ -134,11 +134,7 @@ function createReadProxy(
   });
 }
 
-function createWriteProxy(
-  connection: AgentSideConnection,
-  sessionId: string,
-  cwd: string,
-): ToolDefinition {
+function createWriteProxy(client: AgentContext, sessionId: string, cwd: string): ToolDefinition {
   return defineTool({
     name: "write",
     label: "Write File",
@@ -147,7 +143,7 @@ function createWriteProxy(
     execute: async (_toolCallId, params) => {
       const absolutePath = resolvePath(cwd, params.path);
 
-      await connection.writeTextFile({
+      await client.request("fs/write_text_file", {
         sessionId,
         path: absolutePath,
         content: params.content,
@@ -166,11 +162,7 @@ function createWriteProxy(
   });
 }
 
-function createEditProxy(
-  connection: AgentSideConnection,
-  sessionId: string,
-  cwd: string,
-): ToolDefinition {
+function createEditProxy(client: AgentContext, sessionId: string, cwd: string): ToolDefinition {
   return defineTool({
     name: "edit",
     label: "Edit File",
@@ -179,7 +171,7 @@ function createEditProxy(
     execute: async (_toolCallId, params) => {
       const absolutePath = resolvePath(cwd, params.path);
 
-      const readResponse = await connection.readTextFile({
+      const readResponse = await client.request("fs/read_text_file", {
         sessionId,
         path: absolutePath,
       });
@@ -197,7 +189,7 @@ function createEditProxy(
           content.slice(0, index) + edit.newText + content.slice(index + edit.oldText.length);
       }
 
-      await connection.writeTextFile({
+      await client.request("fs/write_text_file", {
         sessionId,
         path: absolutePath,
         content,
@@ -216,22 +208,20 @@ function createEditProxy(
   });
 }
 
-function createBashProxy(
-  connection: AgentSideConnection,
-  sessionId: string,
-  cwd: string,
-): ToolDefinition {
+function createBashProxy(client: AgentContext, sessionId: string, cwd: string): ToolDefinition {
   return defineTool({
     name: "bash",
     label: "Bash",
     description: "Run a shell command. Returns output and exit code.",
     parameters: bashParams,
     execute: async (_toolCallId, params, signal, onUpdate) => {
-      const terminal = await connection.createTerminal({
+      const { terminalId } = await client.request("terminal/create", {
         sessionId,
         command: params.command,
         cwd,
       });
+      const terminal = { sessionId, terminalId };
+      const release = () => client.request("terminal/release", terminal);
 
       try {
         let accumulated = "";
@@ -240,8 +230,8 @@ function createBashProxy(
         /* eslint-disable no-await-in-loop */
         while (true) {
           if (signal?.aborted) {
-            await terminal.kill();
-            await terminal.release();
+            await client.request("terminal/kill", terminal);
+            await release();
             return {
               content: [{ type: "text" as const, text: accumulated || "Command cancelled" }],
               details: { cancelled: true, truncated: false },
@@ -249,10 +239,13 @@ function createBashProxy(
           }
 
           if (params.timeout && Date.now() - startTime > params.timeout) {
-            await terminal.kill();
+            await client.request("terminal/kill", terminal);
 
-            const finalOutput = await terminal.currentOutput();
-            await terminal.release();
+            const finalOutput: TerminalOutputResponse = await client.request(
+              "terminal/output",
+              terminal,
+            );
+            await release();
             return {
               content: [
                 {
@@ -265,7 +258,7 @@ ${finalOutput.output}`,
             };
           }
 
-          const output = await terminal.currentOutput();
+          const output: TerminalOutputResponse = await client.request("terminal/output", terminal);
           if (output.output !== accumulated) {
             accumulated = output.output;
 
@@ -278,7 +271,7 @@ ${finalOutput.output}`,
           if (output.exitStatus) {
             const exitCode = output.exitStatus.exitCode ?? -1;
 
-            await terminal.release();
+            await release();
 
             return {
               content: [{ type: "text" as const, text: accumulated }],
@@ -294,7 +287,7 @@ ${finalOutput.output}`,
         /* eslint-enable no-await-in-loop */
       } catch (err) {
         try {
-          await terminal.release();
+          await release();
         } catch {
           /* ignore */
         }

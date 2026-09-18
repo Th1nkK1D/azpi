@@ -1,12 +1,6 @@
-import { describe, expect, it, mock } from "bun:test";
-import type { AgentSideConnection } from "@agentclientprotocol/sdk";
+import { describe, expect, it } from "bun:test";
 import { createAcpUiBridge } from "../src/extension-ui-bridge";
-
-function createMockConnection(): AgentSideConnection {
-  return {
-    sessionUpdate: mock(async () => {}),
-  } as unknown as AgentSideConnection;
-}
+import { mockClient as createMockConnection } from "./mock-client";
 
 describe("createAcpUiBridge", () => {
   const sessionId = "test-session-id";
@@ -29,9 +23,10 @@ describe("createAcpUiBridge", () => {
     });
 
     it("does not throw when connection fails", () => {
-      const conn = createMockConnection();
-      (conn.sessionUpdate as any) = mock(async () => {
-        throw new Error("connection closed");
+      const conn = createMockConnection({
+        "session/update": async () => {
+          throw new Error("connection closed");
+        },
       });
       const bridge = createAcpUiBridge(conn, sessionId);
 

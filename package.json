@@ -13,8 +13,8 @@
     "check": "tsc --noEmit"
   },
   "dependencies": {
-    "@agentclientprotocol/sdk": "^0.25.0",
-    "@earendil-works/pi-coding-agent": "^0.80.10"
+    "@agentclientprotocol/sdk": "^1.4.0",
+    "@earendil-works/pi-coding-agent": "^0.85.1"
   },
   "devDependencies": {
     "@types/bun": "latest",

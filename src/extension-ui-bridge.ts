@@ -1,4 +1,4 @@
-import type { AgentSideConnection } from "@agentclientprotocol/sdk";
+import type { AgentContext } from "@agentclientprotocol/sdk";
 import type { ExtensionUIContext, Theme, ThemeColor } from "@earendil-works/pi-coding-agent";
 import { SessionUpdateType } from "./session-update-types";
 
@@ -59,14 +59,11 @@ const passthroughTheme = {
  * (elicitation/create) is tracked but not yet implemented since the
  * protocol is still an RFD.
  */
-export function createAcpUiBridge(
-  connection: AgentSideConnection,
-  sessionId: string,
-): ExtensionUIContext {
+export function createAcpUiBridge(client: AgentContext, sessionId: string): ExtensionUIContext {
   return {
     notify(message: string, _type?: "info" | "warning" | "error"): void {
-      connection
-        .sessionUpdate({
+      client
+        .notify("session/update", {
           sessionId,
           update: {
             content: { text: message, type: "text" },
