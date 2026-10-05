@@ -1394,3 +1394,35 @@ describe("createAgentApp", () => {
     expect(mockSession.dispose).toHaveBeenCalled();
   });
 });
+
+describe("agent_end with willRetry", () => {
+  it("keeps the prompt pending until a non-retry agent_end arrives", async () => {
+    const models = [createMockModel()];
+    const mockSession = createMockSession({ model: models[0] });
+    const conn = createMockConnection();
+    const agent = new PiAcpAgent(conn, {
+      modelRuntime: createMockModelRuntime(),
+      modelRegistry: createMockRegistry(models) as any,
+      sessionFactory: async () => ({ session: mockSession }),
+    });
+
+    const newResult = await agent.newSession(newSessionReq());
+    const subscribers = (mockSession as any)._subscribers as Array<(event: any) => void>;
+    const emit = (event: any) => {
+      for (const sub of subscribers) sub(event);
+    };
+
+    let resolved = false;
+    const promptPromise = agent.prompt(promptReq(newResult.sessionId, "Hello")).then((result) => {
+      resolved = true;
+      return result;
+    });
+
+    emit({ type: "agent_end", messages: [{ stopReason: "error" }], willRetry: true });
+    await Bun.sleep(20);
+    expect(resolved).toBe(false);
+
+    emit({ type: "agent_end", messages: [{ stopReason: "end_turn" }], willRetry: false });
+    expect(await promptPromise).toEqual({ stopReason: "end_turn" });
+  });
+});

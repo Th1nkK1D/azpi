@@ -590,7 +590,9 @@ export class PiAcpAgent {
       this.safeNotify(() => this.client.notify("session/update", notification));
     }
 
-    if (event.type === "agent_end") {
+    // willRetry means Pi will auto-retry this turn, so the prompt is not done
+    // yet — resolving here would end the ACP turn while the retry still streams.
+    if (event.type === "agent_end" && !event.willRetry) {
       const lastMessage = event.messages[event.messages.length - 1];
       const stopReason = mapStopReason(lastMessage);
 
